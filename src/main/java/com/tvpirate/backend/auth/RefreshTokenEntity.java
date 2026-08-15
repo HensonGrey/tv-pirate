@@ -2,7 +2,7 @@ package com.tvpirate.backend.auth;
 
 import java.time.Instant;
 
-import com.tvpirate.backend.user.User;
+import com.tvpirate.backend.user.UserEntity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -22,7 +22,7 @@ import jakarta.persistence.Table;
  */
 @Entity
 @Table(name = "refresh_tokens")
-public class RefreshToken {
+public class RefreshTokenEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -33,7 +33,7 @@ public class RefreshToken {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    private UserEntity user;
 
     @Column(nullable = false)
     private Instant expiresAt;
@@ -41,11 +41,11 @@ public class RefreshToken {
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
-    protected RefreshToken() {
+    protected RefreshTokenEntity() {
         // JPA needs a no-arg constructor.
     }
 
-    public RefreshToken(String tokenHash, User user, Instant expiresAt) {
+    public RefreshTokenEntity(String tokenHash, UserEntity user, Instant expiresAt) {
         this.tokenHash = tokenHash;
         this.user = user;
         this.expiresAt = expiresAt;
@@ -59,7 +59,7 @@ public class RefreshToken {
         return tokenHash;
     }
 
-    public User getUser() {
+    public UserEntity getUser() {
         return user;
     }
 

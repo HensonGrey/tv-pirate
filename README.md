@@ -10,6 +10,7 @@ Spring Boot backend for the tv-pirate learning project.
 - **httpOnly cookie session** — JWT access token (15 min) + opaque refresh token (30 days) delivered as `HttpOnly`, `SameSite=Lax` cookies. JS never sees them.
 - **Refresh rotation** — refresh tokens are SHA-256 hashed in the DB and burned on use (replay → 401), so sessions renew silently and indefinitely.
 - **Session probe** (`GET /api/me`) — the frontend's way to answer "am I logged in?" without touching token storage.
+- **Provider profile pictures** — `users.profile_picture_url` stores the avatar URL the provider hands over for free (Google `picture` claim); guests get null and the frontend falls back to the default avatar.
 - **No hardcoded config** — DB, CORS origins, cookie Secure flag and JWT TTLs are all env-driven.
 
 ## Endpoints
@@ -20,8 +21,6 @@ Spring Boot backend for the tv-pirate learning project.
 | `POST /api/auth/refresh` | cookie | rotate: burn old refresh token, issue new pair |
 | `POST /api/auth/logout` | cookie | burn refresh token, expire cookies |
 | `GET /api/me` | protected | session probe |
-| `GET /api/hello` | protected | demo endpoint |
-| `GET /api/public/hello` | public | demo endpoint |
 
 The JWT filter reads the `access_token` cookie first and falls back to the `Authorization: Bearer` header (curl/Postman).
 
@@ -35,6 +34,6 @@ cp .env.example .env
 .\mvnw.cmd spring-boot:run
 ```
 
-Requires a local PostgreSQL database named `tv-pirate` (schema auto-managed via `ddl-auto=update` — fine for learning, swap to Flyway before production).
+Requires a local PostgreSQL database named `tv-pirate`. Schema is managed by **Liquibase migrations** (every change has an up + `--rollback` down, see `src/main/resources/db/changelog/` — that folder's `agents.md` has the workflow); Hibernate runs in `validate` mode and never alters the DB.
 
 Frontend: [tv-pirate-frontend](https://github.com/HensonGrey/tv-pirate-frontend)

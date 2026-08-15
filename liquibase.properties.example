@@ -1,0 +1,13 @@
+# Copy to liquibase.properties and fill in real values (gitignored).
+# Used by the Liquibase Maven plugin for manual migration/rollback commands
+# (mvn liquibase:update / liquibase:rollback / liquibase:rollbackSQL).
+# The app itself connects via .env.
+url=jdbc:postgresql://localhost:5432/tv-pirate
+username=postgres
+password=YOUR_DB_PASSWORD
+# Paths must match what the Spring Boot app stores in DATABASECHANGELOG:
+# the app runs the changelog from classpath:, which records db/changelog/....
+# Resolving through searchPath gives the CLI the same paths, otherwise
+# rollbacks silently find "0 changesets" (already-ran filter never matches).
+changeLogFile=db/changelog/master.yaml
+searchPath=src/main/resources

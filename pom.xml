@@ -71,6 +71,14 @@
 			<artifactId>postgresql</artifactId>
 			<scope>runtime</scope>
 		</dependency>
+
+		<!-- Versioned DB migrations with rollback support (see src/main/resources/db/changelog).
+		     The starter (not bare liquibase-core) is required in Boot 4.x: it pulls
+		     the spring-boot-liquibase auto-configuration module. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-liquibase</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa-test</artifactId>
@@ -98,6 +106,14 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<!-- Manual migration commands (mvn liquibase:update / liquibase:rollback /
+			     liquibase:rollbackSQL; Liquibase 5 has ONE rollback goal).
+			     Reads backend/liquibase.properties (gitignored, like .env). -->
+			<plugin>
+				<groupId>org.liquibase</groupId>
+				<artifactId>liquibase-maven-plugin</artifactId>
+				<version>${liquibase.version}</version>
 			</plugin>
 		</plugins>
 	</build>

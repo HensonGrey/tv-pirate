@@ -22,7 +22,7 @@ import jakarta.persistence.Table;
  */
 @Entity
 @Table(name = "users")
-public class User {
+public class UserEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -34,6 +34,14 @@ public class User {
     @Column(unique = true)
     private String email;
 
+    /**
+     * Avatar URL supplied by the login provider (Google's "picture" claim).
+     * Nullable: guest accounts have none — the frontend then falls back to
+     * the default avatar. 512 chars: provider avatar URLs can get long.
+     */
+    @Column(length = 512)
+    private String profilePictureUrl;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private AuthProvider provider;
@@ -41,14 +49,19 @@ public class User {
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
-    protected User() {
+    protected UserEntity() {
         // JPA needs a no-arg constructor to create instances when loading rows.
     }
 
-    public User(String username, String email, AuthProvider provider) {
+    public UserEntity(String username, String email, AuthProvider provider) {
+        this(username, email, provider, null);
+    }
+
+    public UserEntity(String username, String email, AuthProvider provider, String profilePictureUrl) {
         this.username = username;
         this.email = email;
         this.provider = provider;
+        this.profilePictureUrl = profilePictureUrl;
     }
 
     public Long getId() {
@@ -65,6 +78,10 @@ public class User {
 
     public AuthProvider getProvider() {
         return provider;
+    }
+
+    public String getProfilePictureUrl() {
+        return profilePictureUrl;
     }
 
     public Instant getCreatedAt() {

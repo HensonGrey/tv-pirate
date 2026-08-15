@@ -11,7 +11,7 @@ import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import com.tvpirate.backend.user.User;
+import com.tvpirate.backend.user.UserEntity;
 
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -45,7 +45,7 @@ public class JwtService {
         this.refreshTtl = Duration.ofDays(refreshDays);
     }
 
-    public String generateAccessToken(User user) {
+    public String generateAccessToken(UserEntity user) {
         Date now = new Date();
         return Jwts.builder()
                 .subject(user.getId().toString())

@@ -5,7 +5,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
-import com.tvpirate.backend.user.User;
+import com.tvpirate.backend.user.UserEntity;
 import com.tvpirate.backend.user.UserRepository;
 
 /**
@@ -25,9 +25,10 @@ public class JwtUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String userId) {
-        User user = userRepository.findById(Long.parseLong(userId))
+        UserEntity user = userRepository.findById(Long.parseLong(userId))
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + userId));
 
-        return new AuthedUser(user.getId(), user.getUsername(), user.getProvider().name());
+        return new AuthedUser(user.getId(), user.getUsername(), user.getProvider().name(),
+                user.getProfilePictureUrl());
     }
 }

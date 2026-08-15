@@ -10,11 +10,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
  * turned into real SQL queries by Spring Data based on their names alone —
  * no SQL is written anywhere.
  */
-public interface UserRepository extends JpaRepository<User, Long> {
+public interface UserRepository extends JpaRepository<UserEntity, Long> {
 
-    Optional<User> findByUsername(String username);
+    Optional<UserEntity> findByUsername(String username);
 
     boolean existsByUsername(String username);
 
-    Optional<User> findByEmail(String email); // for future social login
+    Optional<UserEntity> findByEmail(String email); // for future social login
 }

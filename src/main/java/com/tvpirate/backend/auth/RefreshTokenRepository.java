@@ -5,15 +5,15 @@ import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import com.tvpirate.backend.user.User;
+import com.tvpirate.backend.user.UserEntity;
 
-public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long> {
+public interface RefreshTokenRepository extends JpaRepository<RefreshTokenEntity, Long> {
 
-    Optional<RefreshToken> findByTokenHash(String tokenHash);
+    Optional<RefreshTokenEntity> findByTokenHash(String tokenHash);
 
     long deleteByTokenHash(String tokenHash); // logout: burn one token by hash
 
-    void deleteAllByUser(User user); // future logout / cleanup
+    void deleteAllByUser(UserEntity user); // future logout / cleanup
 
     void deleteAllByExpiresAtBefore(Instant cutoff); // future scheduled cleanup
 }

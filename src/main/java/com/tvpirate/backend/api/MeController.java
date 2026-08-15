@@ -21,6 +21,7 @@ public class MeController {
     @GetMapping("/me")
     public UserDto me(Authentication authentication) {
         AuthedUser principal = (AuthedUser) authentication.getPrincipal();
-        return new UserDto(principal.id(), principal.username(), principal.provider());
+        return new UserDto(principal.id(), principal.username(), principal.provider(),
+                principal.profilePictureUrl());
     }
 }

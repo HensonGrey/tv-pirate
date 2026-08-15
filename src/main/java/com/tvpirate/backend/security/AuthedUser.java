@@ -9,11 +9,11 @@ import org.springframework.security.core.userdetails.UserDetails;
 
 /**
  * The principal put into the SecurityContext by the JWT filter. Carries the
- * fields our controllers actually need (id, username, provider) so
- * {@code /api/me} and friends can answer directly instead of string-parsing
- * Spring's default User.
+ * fields our controllers actually need (id, username, provider, profile
+ * picture) so {@code /api/me} and friends can answer directly instead of
+ * string-parsing Spring's default User.
  */
-public record AuthedUser(Long id, String username, String provider) implements UserDetails {
+public record AuthedUser(Long id, String username, String provider, String profilePictureUrl) implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

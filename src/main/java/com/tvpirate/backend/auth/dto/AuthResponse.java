@@ -1,14 +1,15 @@
 package com.tvpirate.backend.auth.dto;
 
-import com.tvpirate.backend.user.User;
+import com.tvpirate.backend.user.UserEntity;
 
 /** Successful auth response: the token pair plus basic user info for the client. */
 public record AuthResponse(String accessToken, String refreshToken, UserDto user) {
 
-    public static AuthResponse of(String accessToken, String refreshToken, User user) {
+    public static AuthResponse of(String accessToken, String refreshToken, UserEntity user) {
         return new AuthResponse(
                 accessToken,
                 refreshToken,
-                new UserDto(user.getId(), user.getUsername(), user.getProvider().name()));
+                new UserDto(user.getId(), user.getUsername(), user.getProvider().name(),
+                        user.getProfilePictureUrl()));
     }
 }

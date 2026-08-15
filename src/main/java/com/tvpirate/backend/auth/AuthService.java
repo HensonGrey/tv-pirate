@@ -16,7 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.tvpirate.backend.auth.dto.AuthResponse;
 import com.tvpirate.backend.security.JwtService;
 import com.tvpirate.backend.user.AuthProvider;
-import com.tvpirate.backend.user.User;
+import com.tvpirate.backend.user.UserEntity;
 import com.tvpirate.backend.user.UserRepository;
 
 @Service
@@ -39,7 +39,7 @@ public class AuthService {
     /** Creates a fresh guest account and logs it in. */
     @Transactional
     public AuthResponse loginAsGuest() {
-        User guest = new User(generateGuestUsername(), null, AuthProvider.GUEST);
+        UserEntity guest = new UserEntity(generateGuestUsername(), null, AuthProvider.GUEST);
         userRepository.save(guest);
         return issueTokens(guest);
     }
@@ -50,7 +50,7 @@ public class AuthService {
      */
     @Transactional
     public AuthResponse refresh(String refreshToken) {
-        RefreshToken stored = refreshTokenRepository.findByTokenHash(sha256(refreshToken))
+        RefreshTokenEntity stored = refreshTokenRepository.findByTokenHash(sha256(refreshToken))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid refresh token"));
 
         if (stored.getExpiresAt().isBefore(Instant.now())) {
@@ -76,11 +76,11 @@ public class AuthService {
         return jwtService.getRefreshTtl();
     }
 
-    private AuthResponse issueTokens(User user) {
+    private AuthResponse issueTokens(UserEntity user) {
         String accessToken = jwtService.generateAccessToken(user);
         String refreshToken = jwtService.generateRefreshToken();
         Instant expiresAt = Instant.now().plus(jwtService.getRefreshTtl());
-        refreshTokenRepository.save(new RefreshToken(sha256(refreshToken), user, expiresAt));
+        refreshTokenRepository.save(new RefreshTokenEntity(sha256(refreshToken), user, expiresAt));
         return AuthResponse.of(accessToken, refreshToken, user);
     }
 
