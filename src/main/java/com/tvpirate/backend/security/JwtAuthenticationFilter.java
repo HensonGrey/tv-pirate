@@ -18,13 +18,9 @@ import jakarta.servlet.http.HttpServletResponse;
 
 import org.springframework.http.HttpHeaders;
 
-/**
- * Runs once for every request. If the request carries a valid JWT, it looks
- * up the user and marks the request as authenticated by putting an
- * Authentication into the SecurityContext. Requests without a (valid) token
- * simply continue as anonymous — the authorization rules in SecurityConfig
- * decide whether the endpoint still allows that.
- */
+/** Runs once per request: a valid JWT marks the request authenticated via
+ * the SecurityContext; otherwise it stays anonymous and the authorization
+ * rules decide. vault:auth-deep-dive#filter */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
@@ -62,11 +58,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    /**
-     * Cookie first (the browser attaches it automatically), Authorization
-     * header as fallback — handy for curl/Postman testing and non-browser
-     * clients.
-     */
+    /** Cookie first (browser attaches it automatically), Authorization
+     * header as fallback for curl/Postman. */
     private String resolveToken(HttpServletRequest request) {
         Cookie[] cookies = request.getCookies();
         if (cookies != null) {

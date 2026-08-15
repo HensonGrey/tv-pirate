@@ -16,24 +16,16 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import jakarta.servlet.DispatcherType;
+
 import com.tvpirate.backend.security.JwtAuthenticationFilter;
 
 import jakarta.servlet.http.HttpServletResponse;
 
-/**
- * The security rulebook. The SecurityFilterChain is a pipeline every request
- * passes through: CORS → our JWT filter → CSRF → authorization rules. Auth
- * stays stateless (JWT, no server session).
- *
- * CSRF: with cookies, the browser attaches credentials automatically — which
- * is exactly what CSRF attacks exploit (a malicious site triggering a request
- * that rides along on the victim's cookies). We defend with SameSite=Lax on
- * the auth cookies instead of the default CSRF machinery: cross-site POSTs
- * don't carry the cookie, and all our state-changing endpoints are POSTs.
- * This works because frontend and backend share a site (localhost in dev,
- * same domain/subdomains in prod). If they ever move to genuinely different
- * sites, add Spring's XSRF-TOKEN double-submit pattern.
- */
+/** The security rulebook: every request passes CORS → JWT filter → CSRF →
+ * authorization rules, stateless (JWT, no server session). CSRF is defended
+ * with SameSite=Lax cookies instead of the default machinery.
+ * vault:auth-deep-dive#csrf */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
@@ -50,7 +42,7 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(csrf -> csrf.disable()) // defended by SameSite=Lax cookies instead (see class comment)
+                .csrf(csrf -> csrf.disable()) // SameSite=Lax cookies defend instead. vault:auth-deep-dive#csrf
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .formLogin(form -> form.disable())
@@ -58,6 +50,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll() // CORS preflight
+                        // ERROR dispatches pass this chain too, and the JWT filter skips
+                        // them — without this, errors mask as 401. vault:auth-deep-dive#error-dispatch
+                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, authException) ->
                         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED)))
@@ -66,12 +61,8 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /**
-     * CORS: the browser blocks cross-origin requests unless the server
-     * explicitly allows them. Only the Vite dev server may call us, and
-     * credentials are allowed (note: with credentials enabled, the wildcard
-     * origin is illegal — the origin must be listed explicitly).
-     */
+    /** Only the whitelisted origins may call us; with credentials enabled
+     * the wildcard origin is illegal, so the list is explicit. */
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();

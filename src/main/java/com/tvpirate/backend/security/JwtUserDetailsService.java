@@ -8,12 +8,9 @@ import org.springframework.stereotype.Service;
 import com.tvpirate.backend.user.UserEntity;
 import com.tvpirate.backend.user.UserRepository;
 
-/**
- * Spring Security's seam for loading a user record. Historically named
- * "loadUserByUsername", but our tokens carry the user <b>id</b>, so that is
- * what gets passed in. Loading the user on every request (instead of trusting
- * the JWT alone) means a deleted account loses access immediately.
- */
+/** Spring Security's user-loading seam — our tokens carry the user id, so
+ * that's what's passed in. DB lookup per request means a deleted account
+ * loses access immediately. vault:auth-deep-dive#user-loading */
 @Service
 public class JwtUserDetailsService implements UserDetailsService {
 

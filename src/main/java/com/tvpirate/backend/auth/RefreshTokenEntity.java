@@ -14,12 +14,9 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
-/**
- * A stored refresh token. Only the SHA-256 <b>hash</b> of the token is kept —
- * if the table ever leaks, the tokens themselves are still useless. Rotation
- * (delete + insert on every refresh) is what makes logout/revocation possible
- * and limits the damage window of a stolen token.
- */
+/** A stored refresh token — only the SHA-256 hash is kept, so a leaked table
+ * is useless. Rotation (delete + insert per refresh) enables revocation.
+ * vault:auth-deep-dive#tokens */
 @Entity
 @Table(name = "refresh_tokens")
 public class RefreshTokenEntity {

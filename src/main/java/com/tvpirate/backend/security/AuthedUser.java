@@ -7,12 +7,8 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-/**
- * The principal put into the SecurityContext by the JWT filter. Carries the
- * fields our controllers actually need (id, username, provider, profile
- * picture) so {@code /api/me} and friends can answer directly instead of
- * string-parsing Spring's default User.
- */
+/** The principal the JWT filter puts in the SecurityContext — carries the
+ * fields controllers need, instead of Spring's string-parsing default User. */
 public record AuthedUser(Long id, String username, String provider, String profilePictureUrl) implements UserDetails {
 
     @Override

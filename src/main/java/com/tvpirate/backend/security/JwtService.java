@@ -16,19 +16,10 @@ import com.tvpirate.backend.user.UserEntity;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 
-/**
- * Creates and validates the two kinds of tokens:
- *
- * <ul>
- * <li><b>Access token</b> — a signed JWT, short-lived (15 min). Sent with
- * every request as {@code Authorization: Bearer <token>}. Self-contained:
- * the signature proves we issued it, so no DB lookup is needed to trust it.
- * <li><b>Refresh token</b> — a long random string (not a JWT), long-lived
- * (30 days). Only used at {@code /api/auth/refresh} to get a new access
- * token. Its hash is stored in the DB, which is what makes revocation and
- * rotation possible.
- * </ul>
- */
+/** Creates and validates the two kinds of tokens: a signed short-lived JWT
+ * (access — self-contained, no DB lookup to trust it) and a long random
+ * string (refresh — only its hash lives in the DB, enabling revocation).
+ * vault:auth-deep-dive#tokens */
 @Service
 public class JwtService {
 

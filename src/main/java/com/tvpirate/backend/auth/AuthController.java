@@ -18,20 +18,10 @@ import com.tvpirate.backend.auth.dto.UserDto;
 
 import jakarta.servlet.http.HttpServletResponse;
 
-/**
- * Public auth endpoints (whitelisted in SecurityConfig). A future provider
- * login (Google, ...) will add its endpoints here too.
- *
- * Tokens travel as httpOnly cookies instead of a JSON body:
- * <ul>
- * <li><b>access_token</b> — Path=/, sent with every request, read by the
- *     JwtAuthenticationFilter.
- * <li><b>refresh_token</b> — Path=/api/auth, so the browser only ever sends
- *     it to the auth endpoints.
- * </ul>
- * httpOnly means JS can't read them (XSS can't steal them) — but it also
- * means only the server can delete them, which is why logout is an endpoint.
- */
+/** Public auth endpoints (whitelisted in SecurityConfig); future provider
+ * logins add their endpoints here. Tokens travel as httpOnly cookies:
+ * access on Path=/, refresh only on Path=/api/auth — httpOnly keeps JS from
+ * reading them, which is why logout is an endpoint. vault:auth-deep-dive#cookies */
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
@@ -49,10 +39,8 @@ public class AuthController {
         this.cookieSecure = cookieSecure;
     }
 
-    // SECURITY NOTE: creating a guest account costs a DB row + token pair and
-    // requires no credentials, so this endpoint is a potential DoS weak spot
-    // (unauthenticated callers can bloat users/refresh_tokens). REVISIT when
-    // rate limiting is added.
+    // SECURITY NOTE: guest = DB row + token pair with no credentials — a DoS
+    // weak spot until rate limiting exists. vault:auth-deep-dive#guest-dos
     @PostMapping("/guest")
     public UserDto guest(HttpServletResponse response) {
         AuthResponse auth = authService.loginAsGuest();
@@ -60,11 +48,8 @@ public class AuthController {
         return auth.user();
     }
 
-    /**
-     * The refresh token arrives as a cookie the browser adds automatically —
-     * the client just POSTs here with an empty body. Rotation is unchanged:
-     * the old token is burned and a new pair comes back in cookies.
-     */
+    /** The refresh cookie arrives automatically — the client POSTs with an
+     * empty body and the new pair comes back in cookies. */
     @PostMapping("/refresh")
     public UserDto refresh(@CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken,
                            HttpServletResponse response) {

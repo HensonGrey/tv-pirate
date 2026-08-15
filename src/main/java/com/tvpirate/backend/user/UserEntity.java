@@ -11,15 +11,9 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
-/**
- * A user account — one row in the "users" table.
- *
- * <p>There are no local username/password accounts: a user is either a guest
- * (one-click account, no credentials) or comes from a login provider (Google,
- * etc.). That is why there is no password column at all — {@link AuthProvider}
- * records which method the account belongs to, and email stays nullable
- * because guest accounts don't have one.
- */
+/** A user account. No local username/password accounts exist: a user is a
+ * guest (one-click) or comes from a provider — so no password column, and
+ * email is nullable for guests. vault:auth-deep-dive#user-model */
 @Entity
 @Table(name = "users")
 public class UserEntity {
@@ -34,11 +28,9 @@ public class UserEntity {
     @Column(unique = true)
     private String email;
 
-    /**
-     * Avatar URL supplied by the login provider (Google's "picture" claim).
-     * Nullable: guest accounts have none — the frontend then falls back to
-     * the default avatar. 512 chars: provider avatar URLs can get long.
-     */
+    /** Provider-supplied avatar URL (Google's picture claim); null for
+     * guests — the frontend falls back to the default avatar. 512 chars:
+     * provider URLs get long. */
     @Column(length = 512)
     private String profilePictureUrl;
 

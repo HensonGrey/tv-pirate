@@ -72,6 +72,19 @@
 			<scope>runtime</scope>
 		</dependency>
 
+		<!-- Spring's cache abstraction (@Cacheable) backed by Caffeine, an
+		     in-memory TTL cache. TMDB answers get reused for a few minutes
+		     instead of re-fetching on every tab click — keeps us well under
+		     TMDB's ~50 req/s rate limit and feels snappier. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-cache</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.github.ben-manes.caffeine</groupId>
+			<artifactId>caffeine</artifactId>
+		</dependency>
+
 		<!-- Versioned DB migrations with rollback support (see src/main/resources/db/changelog).
 		     The starter (not bare liquibase-core) is required in Boot 4.x: it pulls
 		     the spring-boot-liquibase auto-configuration module. -->
