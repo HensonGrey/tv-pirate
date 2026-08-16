@@ -2,6 +2,9 @@
 .env
 liquibase.properties
 
+# runtime caches (subtitle files, etc.)
+data/
+
 HELP.md
 target/
 .mvn/wrapper/maven-wrapper.jar
