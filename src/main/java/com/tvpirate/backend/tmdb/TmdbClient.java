@@ -87,6 +87,16 @@ public class TmdbClient {
                 .body(TmdbSeasonDetail.class);
     }
 
+    /** GET /{type}/{id}/external_ids — the IMDb id providers like videasy want. */
+    @Cacheable(cacheNames = "tmdb-imdb-id", key = "#type + ':' + #id")
+    public String imdbId(String type, long id) {
+        ExternalIdsResponse response = tmdb.get()
+                .uri("/{type}/{id}/external_ids", type, id)
+                .retrieve()
+                .body(ExternalIdsResponse.class);
+        return response == null ? null : response.imdbId();
+    }
+
     /** Cached 24 h: the genre tables are static and every result list needs them. */
     @Cacheable(cacheNames = "tmdb-genres", key = "#type")
     public List<GenreEntry> genreTable(String type) {
@@ -191,4 +201,6 @@ public class TmdbClient {
             @JsonProperty("secure_base_url") String secureBaseUrl,
             @JsonProperty("poster_sizes") List<String> posterSizes,
             @JsonProperty("backdrop_sizes") List<String> backdropSizes) {}
+
+    record ExternalIdsResponse(@JsonProperty("imdb_id") String imdbId) {}
 }

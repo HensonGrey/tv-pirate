@@ -46,8 +46,9 @@ public class StreamProxyService {
     private static final String BROWSER_UA =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 
-    /** Encrypted-HLS key URIs; our providers serve plain playlists, but the
-     * rewrite is cheap insurance if that ever changes. */
+    /** Encrypted-HLS key URIs and fMP4 init-map URIs; our providers serve
+     * plain playlists, but the rewrite is cheap insurance — and videasy's
+     * fMP4 playlists DO carry EXT-X-MAP lines. */
     private static final Pattern KEY_URI_PATTERN = Pattern.compile("URI=\"([^\"]+)\"");
 
     private final Cache<String, ProxyTarget> targets;
@@ -152,17 +153,17 @@ public class StreamProxyService {
         }
     }
 
-    /** Rewrites every URI line (and EXT-X-KEY URIs) to a fresh proxy token,
+    /** Rewrites every URI line (EXT-X-KEY, EXT-X-MAP) to a fresh proxy token,
      * resolving relative ones against the playlist's own URL. The child
      * inherits the parent's headers — the referer requirement applies to
-     * segments exactly like it applies to the playlist. */
+     * init maps and segments exactly like it applies to the playlist. */
     private byte[] rewritePlaylist(byte[] body, ProxyTarget target) throws IOException {
         URI parent = URI.create(target.url());
         List<String> rewritten = new ArrayList<>();
         for (String line : new String(body, StandardCharsets.UTF_8).split("\\r?\\n", -1)) {
             if (line.isEmpty()) {
                 rewritten.add(line);
-            } else if (line.startsWith("#EXT-X-KEY")) {
+            } else if (line.startsWith("#EXT-X-KEY") || line.startsWith("#EXT-X-MAP")) {
                 Matcher matcher = KEY_URI_PATTERN.matcher(line);
                 if (matcher.find()) {
                     String child = register(parent.resolve(matcher.group(1)).toString(), target.headers());
