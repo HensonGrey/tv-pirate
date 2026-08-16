@@ -14,6 +14,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.tvpirate.backend.tmdb.dto.GenreInfo;
 import com.tvpirate.backend.tmdb.dto.MediaItem;
 import com.tvpirate.backend.tmdb.dto.PageResponse;
+import com.tvpirate.backend.tmdb.dto.SeasonInfo;
 
 /** Our TMDB proxy — the frontend calls these, the backend forwards with the
  * key from .env. /genres and /{type}/{id} don't clash: Spring prefers the
@@ -70,6 +71,16 @@ public class TmdbController {
     public MediaItem detail(@PathVariable String type, @PathVariable long id) {
         checkType(type);
         return tmdbService.detail(type, id);
+    }
+
+    /** One season of a show — identity + poster + the episode list feeding
+     * the picker and the episode description. */
+    @GetMapping("/tv/{id}/season/{season}")
+    public SeasonInfo seasonEpisodes(@PathVariable long id, @PathVariable int season) {
+        if (season < 1 || season > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "season must be between 1 and 100");
+        }
+        return tmdbService.seasonEpisodes(id, season);
     }
 
     /** The selectable genre list, movie + tv tables merged (see GenreInfo). */

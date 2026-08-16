@@ -79,6 +79,14 @@ public class TmdbClient {
                 .body(TmdbTvDetail.class);
     }
 
+    /** GET /tv/{id}/season/{n} — the episode list for one season. */
+    public TmdbSeasonDetail tvSeason(long id, int season) {
+        return tmdb.get()
+                .uri("/tv/{id}/season/{season}", id, season)
+                .retrieve()
+                .body(TmdbSeasonDetail.class);
+    }
+
     /** Cached 24 h: the genre tables are static and every result list needs them. */
     @Cacheable(cacheNames = "tmdb-genres", key = "#type")
     public List<GenreEntry> genreTable(String type) {
@@ -158,6 +166,19 @@ public class TmdbClient {
             @JsonProperty("number_of_seasons") Integer numberOfSeasons,
             @JsonProperty("number_of_episodes") Integer numberOfEpisodes,
             @JsonProperty("episode_run_time") List<Integer> episodeRunTime) {}
+
+    record TmdbSeasonDetail(
+            @JsonProperty("season_number") Integer seasonNumber,
+            String name,
+            @JsonProperty("poster_path") String posterPath,
+            List<TmdbEpisode> episodes) {}
+
+    record TmdbEpisode(
+            @JsonProperty("episode_number") Integer episodeNumber,
+            String name,
+            String overview,
+            @JsonProperty("still_path") String stillPath,
+            Integer runtime) {}
 
     /** One row of a genre table (also the shape of a detail's genres list). */
     record GenreEntry(long id, String name) {}

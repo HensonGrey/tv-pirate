@@ -49,6 +49,10 @@ public class SecurityConfig {
                 .httpBasic(basic -> basic.disable())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
+                        // Playback proxy: a <video> tag can't carry the JWT cookie
+                        // cross-origin — the unguessable, short-lived proxy token IS
+                        // the credential (signed-URL pattern). vault:streaming-providers-deep-dive#architecture
+                        .requestMatchers("/api/stream/proxy/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll() // CORS preflight
                         // ERROR dispatches pass this chain too, and the JWT filter skips
                         // them — without this, errors mask as 401. vault:auth-deep-dive#error-dispatch

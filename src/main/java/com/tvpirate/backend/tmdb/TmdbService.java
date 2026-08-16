@@ -20,9 +20,11 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.tvpirate.backend.tmdb.dto.EpisodeInfo;
 import com.tvpirate.backend.tmdb.dto.GenreInfo;
 import com.tvpirate.backend.tmdb.dto.MediaItem;
 import com.tvpirate.backend.tmdb.dto.PageResponse;
+import com.tvpirate.backend.tmdb.dto.SeasonInfo;
 
 /**
  * Business logic between TmdbClient (raw TMDB) and the controller (our
@@ -135,6 +137,27 @@ public class TmdbService {
                     imageUrl(images, BACKDROP_SIZE, detail.backdropPath()),
                     rating(detail.voteAverage()), namesOf(detail.genres()),
                     year(detail.releaseDate()), detail.runtime(), null, null);
+        });
+    }
+
+    /** One season: identity + poster (the picker's visual) and the episode
+     * list with numbers, names and overviews. Cached with the other detail
+     * data: episode tables effectively never change. */
+    @Cacheable(cacheNames = "tmdb-detail", key = "'season:' + #tvId + ':' + #season")
+    public SeasonInfo seasonEpisodes(long tvId, int season) {
+        return guarded(() -> {
+            TmdbClient.TmdbSeasonDetail seasonDetail = client.tvSeason(tvId, season);
+            if (seasonDetail == null) {
+                return new SeasonInfo(null, null, null, List.of());
+            }
+            TmdbClient.ImageSettings images = client.imageConfig();
+            List<EpisodeInfo> episodes = seasonDetail.episodes() == null
+                    ? List.of()
+                    : seasonDetail.episodes().stream()
+                            .map(ep -> new EpisodeInfo(ep.episodeNumber(), ep.name(), ep.overview(), ep.runtime()))
+                            .toList();
+            return new SeasonInfo(seasonDetail.seasonNumber(), seasonDetail.name(),
+                    imageUrl(images, POSTER_SIZE, seasonDetail.posterPath()), episodes);
         });
     }
 
