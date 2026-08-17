@@ -8,3 +8,6 @@ databaseChangeLog:
   - include:
       file: 0003-watch-progress.sql
       relativeToChangelogFile: true
+  - include:
+      file: 0004-favourites.sql
+      relativeToChangelogFile: true
