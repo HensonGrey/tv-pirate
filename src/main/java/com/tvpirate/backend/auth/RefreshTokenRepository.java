@@ -1,6 +1,7 @@
 package com.tvpirate.backend.auth;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -16,4 +17,7 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshTokenEntity
     void deleteAllByUser(UserEntity user); // future logout / cleanup
 
     void deleteAllByExpiresAtBefore(Instant cutoff); // future scheduled cleanup
+
+    /** The guest sweep deletes everything a stale user owns. */
+    void deleteAllByUserIn(List<UserEntity> users);
 }

@@ -11,3 +11,9 @@ databaseChangeLog:
   - include:
       file: 0004-favourites.sql
       relativeToChangelogFile: true
+  - include:
+      file: 0005-user-last-activity.sql
+      relativeToChangelogFile: true
+  - include:
+      file: 0006-touch-triggers.xml
+      relativeToChangelogFile: true

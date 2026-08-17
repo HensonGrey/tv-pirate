@@ -41,6 +41,12 @@ public class UserEntity {
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
+    /** Activity clock owned by the DB trigger (migration 0005) — the app
+     * never writes it, so updatable=false keeps a stale in-memory copy from
+     * overwriting a fresher trigger value. vault:guest-cleanup-deep-dive#trigger */
+    @Column(name = "last_activity_at", nullable = false, updatable = false)
+    private Instant lastActivityAt = Instant.now();
+
     protected UserEntity() {
         // JPA needs a no-arg constructor to create instances when loading rows.
     }
@@ -78,5 +84,9 @@ public class UserEntity {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public Instant getLastActivityAt() {
+        return lastActivityAt;
     }
 }

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- Formatted SQL can't hold a $$...$$ body (its splitter cuts on any
+         semicolon), so the activity-bump trigger lives in XML, where
+         splitStatements="false" is honored. -->
+
+    <changeSet id="0006-touch-function" author="tvpirate">
+        <comment>one trigger function: any write to a user-scoped table bumps the user's activity clock</comment>
+        <sql splitStatements="false">
+CREATE FUNCTION touch_user_last_activity() RETURNS trigger AS $$
+BEGIN
+    UPDATE users SET last_activity_at = now() WHERE id = COALESCE(NEW.user_id, OLD.user_id);
+    RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql;
+        </sql>
+        <rollback>DROP FUNCTION touch_user_last_activity();</rollback>
+    </changeSet>
+
+    <changeSet id="0006-touch-triggers" author="tvpirate">
+        <comment>wire the bump into every user-scoped table (new such tables must add one too — see agents.md)</comment>
+        <sql>
+CREATE TRIGGER trg_watch_progress_touch AFTER INSERT OR UPDATE OR DELETE ON watch_progress FOR EACH ROW EXECUTE FUNCTION touch_user_last_activity();
+CREATE TRIGGER trg_favourites_touch AFTER INSERT OR UPDATE OR DELETE ON favourites FOR EACH ROW EXECUTE FUNCTION touch_user_last_activity();
+CREATE TRIGGER trg_refresh_tokens_touch AFTER INSERT OR UPDATE OR DELETE ON refresh_tokens FOR EACH ROW EXECUTE FUNCTION touch_user_last_activity();
+        </sql>
+        <rollback>
+DROP TRIGGER trg_refresh_tokens_touch ON refresh_tokens;
+DROP TRIGGER trg_favourites_touch ON favourites;
+DROP TRIGGER trg_watch_progress_touch ON watch_progress;
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

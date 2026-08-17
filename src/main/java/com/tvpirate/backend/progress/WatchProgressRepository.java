@@ -21,4 +21,7 @@ public interface WatchProgressRepository extends JpaRepository<WatchProgressEnti
 
     void deleteByUserIdAndTmdbIdAndMediaTypeAndSeasonNumberAndEpisodeNumber(
             Long userId, long tmdbId, String mediaType, Integer seasonNumber, Integer episodeNumber);
+
+    /** The guest sweep deletes everything a stale user owns. */
+    void deleteAllByUserIdIn(List<Long> userIds);
 }

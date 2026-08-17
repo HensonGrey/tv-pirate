@@ -17,6 +17,14 @@ schema.
 4. **Applied changesets are immutable.** Never edit a changeset that may have
    already run on a database (checksum mismatch → startup failure). To change
    something, write a *new* changeset.
+5. **Every user-scoped table gets the activity trigger** (see
+   `0006-touch-triggers.xml`): a table holding a `user_id` column must
+   add `CREATE TRIGGER ... AFTER INSERT OR UPDATE OR DELETE ... EXECUTE
+   FUNCTION touch_user_last_activity();` in its own migration, so the daily
+   guest sweep always sees real activity. The trigger function lives in an
+   **XML changelog** because formatted SQL splits on *any* semicolon and
+   ignores `--splitStatements:false` — a `$$...$$` body gets shredded
+   (verified the hard way); XML `<sql splitStatements="false">` works.
 
 ## How to add a migration
 
