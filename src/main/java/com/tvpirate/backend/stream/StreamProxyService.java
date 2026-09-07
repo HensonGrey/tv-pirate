@@ -123,8 +123,10 @@ public class StreamProxyService {
                 }
 
                 String contentType = upstream.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE);
-                boolean isPlaylist = contentType != null
-                        && (contentType.contains("mpegurl") || contentType.contains("m3u8"));
+                // Some CDNs serve playlists as text/plain or octet-stream.
+                boolean isPlaylist = (contentType != null
+                        && (contentType.contains("mpegurl") || contentType.contains("m3u8")))
+                        || URI.create(target.url()).getPath().endsWith(".m3u8");
                 if (isPlaylist) {
                     byte[] rewritten = rewritePlaylist(upstream.getBody().readAllBytes(), target);
                     return ResponseEntity.status(upstream.getStatusCode())
