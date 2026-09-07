@@ -21,29 +21,25 @@ public class ProgressService {
     }
 
     /** Last-write-wins upsert: a rewatch starts near 0 and must be able to
-     * overwrite a mid-episode value, so no "only grow" guard. */
+     * overwrite a mid-episode value, so no "only grow" guard. Native
+     * ON CONFLICT, not find-then-save — two concurrent heartbeats for the
+     * same episode used to both miss and both insert, violating the unique
+     * index. */
     @Transactional
     public void upsert(Long userId, SaveProgressRequest request) {
         // Sub-5-second plays are noise (accidental opens) — never create a row.
         if (request.progressSeconds() < 5) {
             return;
         }
-        // Movie coordinates are normalized away regardless of what the client sent.
-        Integer season = "tv".equals(request.mediaType()) ? request.season() : null;
-        Integer episode = "tv".equals(request.mediaType()) ? request.episode() : null;
-        WatchProgressEntity row = "tv".equals(request.mediaType())
-                ? repository.findByUserIdAndTmdbIdAndMediaTypeAndSeasonNumberAndEpisodeNumber(
-                        userId, request.tmdbId(), request.mediaType(), season, episode)
-                        .orElseGet(() -> new WatchProgressEntity(
-                                userId, request.tmdbId(), request.mediaType(), season, episode))
-                : repository.findByUserIdAndTmdbIdAndMediaTypeAndSeasonNumberIsNull(
-                        userId, request.tmdbId(), request.mediaType())
-                        .orElseGet(() -> new WatchProgressEntity(
-                                userId, request.tmdbId(), request.mediaType()));
-        row.setProgressSeconds(request.progressSeconds());
-        row.setDurationSeconds(request.durationSeconds());
-        row.setUpdatedAt(Instant.now());
-        repository.save(row);
+        Instant now = Instant.now();
+        if ("tv".equals(request.mediaType())) {
+            repository.upsertEpisode(userId, request.tmdbId(), request.mediaType(),
+                    request.season(), request.episode(),
+                    request.progressSeconds(), request.durationSeconds(), now);
+        } else {
+            repository.upsertMovie(userId, request.tmdbId(), request.mediaType(),
+                    request.progressSeconds(), request.durationSeconds(), now);
+        }
     }
 
     @Transactional(readOnly = true)

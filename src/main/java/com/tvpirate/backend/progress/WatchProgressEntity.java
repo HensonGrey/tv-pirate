@@ -46,23 +46,11 @@ public class WatchProgressEntity {
     private Integer durationSeconds;
 
     @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt = Instant.now();
+    private Instant updatedAt;
 
     protected WatchProgressEntity() {
-        // JPA needs a no-arg constructor.
-    }
-
-    public WatchProgressEntity(Long userId, long tmdbId, String mediaType) {
-        this(userId, tmdbId, mediaType, null, null);
-    }
-
-    public WatchProgressEntity(Long userId, long tmdbId, String mediaType,
-                               Integer seasonNumber, Integer episodeNumber) {
-        this.userId = userId;
-        this.tmdbId = tmdbId;
-        this.mediaType = mediaType;
-        this.seasonNumber = seasonNumber;
-        this.episodeNumber = episodeNumber;
+        // JPA needs a no-arg constructor; rows are only ever written via
+        // WatchProgressRepository's native upsert queries.
     }
 
     public Long getId() {
@@ -99,17 +87,5 @@ public class WatchProgressEntity {
 
     public Instant getUpdatedAt() {
         return updatedAt;
-    }
-
-    public void setProgressSeconds(int progressSeconds) {
-        this.progressSeconds = progressSeconds;
-    }
-
-    public void setDurationSeconds(Integer durationSeconds) {
-        this.durationSeconds = durationSeconds;
-    }
-
-    public void setUpdatedAt(Instant updatedAt) {
-        this.updatedAt = updatedAt;
     }
 }
