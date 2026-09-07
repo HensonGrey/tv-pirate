@@ -1,5 +1,6 @@
 package com.tvpirate.backend.favourite;
 
+import java.time.Instant;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -27,11 +28,7 @@ public class FavouriteService {
 
     @Transactional
     public void add(Long userId, long tmdbId, String mediaType) {
-        if (!repository.existsByUserIdAndTmdbIdAndMediaType(userId, tmdbId, mediaType)) {
-            repository.save(new FavouriteEntity(userId, tmdbId, mediaType));
-        }
-        // The unique constraint is the race backstop: a lost insert races to
-        // a constraint violation, which reads the same as "already saved".
+        repository.upsert(userId, tmdbId, mediaType, Instant.now());
     }
 
     @Transactional

@@ -31,16 +31,11 @@ public class FavouriteEntity {
     private String mediaType;
 
     @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt = Instant.now();
+    private Instant createdAt;
 
     protected FavouriteEntity() {
-        // JPA needs a no-arg constructor.
-    }
-
-    public FavouriteEntity(Long userId, long tmdbId, String mediaType) {
-        this.userId = userId;
-        this.tmdbId = tmdbId;
-        this.mediaType = mediaType;
+        // JPA needs a no-arg constructor; rows are only ever written via
+        // FavouriteRepository.upsert's native INSERT.
     }
 
     public Long getId() {
