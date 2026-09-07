@@ -78,8 +78,12 @@ public class StreamProxyService {
     }
 
     /** One playable source → one capability token. The URL and its headers
-     * never reach the browser; the token is the only handle it gets. */
+     * never reach the browser; the token is the only handle it gets. Guarded
+     * here so every caller — the top-level source, and every URI pulled out
+     * of a playlist by {@link #rewritePlaylist} — is checked before it's
+     * even mintable, not just when it's later fetched. */
     public String register(String url, Map<String, String> headers) {
+        guard.assertPublicTarget(url);
         String token = UUID.randomUUID().toString().replace("-", "");
         targets.put(token, new ProxyTarget(url, headers));
         return token;
