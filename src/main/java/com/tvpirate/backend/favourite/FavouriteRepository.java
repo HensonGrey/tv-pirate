@@ -11,7 +11,4 @@ public interface FavouriteRepository extends JpaRepository<FavouriteEntity, Long
     boolean existsByUserIdAndTmdbIdAndMediaType(Long userId, long tmdbId, String mediaType);
 
     void deleteByUserIdAndTmdbIdAndMediaType(Long userId, long tmdbId, String mediaType);
-
-    /** The guest sweep deletes everything a stale user owns. */
-    void deleteAllByUserIdIn(List<Long> userIds);
 }
