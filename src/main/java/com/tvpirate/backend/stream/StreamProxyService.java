@@ -2,12 +2,14 @@ package com.tvpirate.backend.stream;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -51,10 +53,17 @@ public class StreamProxyService {
      * fMP4 playlists DO carry EXT-X-MAP lines. */
     private static final Pattern KEY_URI_PATTERN = Pattern.compile("URI=\"([^\"]+)\"");
 
-    private final Cache<String, ProxyTarget> targets;
-    private final SimpleClientHttpRequestFactory factory;
+    /** A redirect hop is a fresh request to a (possibly different) host — cap
+     * it so a malicious or misconfigured upstream can't loop us forever. */
+    private static final int MAX_REDIRECTS = 5;
+    private static final Set<Integer> REDIRECT_STATUSES = Set.of(301, 302, 303, 307, 308);
 
-    public StreamProxyService() {
+    private final Cache<String, ProxyTarget> targets;
+    private final ManualRedirectRequestFactory factory;
+    private final PublicTargetGuard guard;
+
+    public StreamProxyService(PublicTargetGuard guard) {
+        this.guard = guard;
         // A 2 h movie is ~2000 segments, each with its own token — size the
         // cache for a few concurrent movies.
         this.targets = Caffeine.newBuilder()
@@ -63,7 +72,7 @@ public class StreamProxyService {
                 .build();
         // Read timeout is per-read inactivity (not total) — a slow-but-alive
         // movie download must not be killed at 20 s.
-        this.factory = new SimpleClientHttpRequestFactory();
+        this.factory = new ManualRedirectRequestFactory();
         this.factory.setConnectTimeout(Duration.ofSeconds(5));
         this.factory.setReadTimeout(Duration.ofSeconds(20));
     }
@@ -97,11 +106,7 @@ public class StreamProxyService {
         }
         for (int attempt = 1; attempt <= 2; attempt++) {
             try {
-                ClientHttpRequest request = factory.createRequest(URI.create(target.url()), HttpMethod.GET);
-                request.getHeaders().set(HttpHeaders.USER_AGENT, BROWSER_UA);
-                target.headers().forEach(request.getHeaders()::set);
-                if (range != null) request.getHeaders().set(HttpHeaders.RANGE, range);
-                ClientHttpResponse upstream = request.execute();
+                ClientHttpResponse upstream = fetchFollowingRedirects(target, range);
 
                 if (upstream.getStatusCode().is4xxClientError()
                         || upstream.getStatusCode().is5xxServerError()) {
@@ -141,6 +146,29 @@ public class StreamProxyService {
             }
         }
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY).build();
+    }
+
+    /** Follows redirects ourselves — the factory below has them disabled —
+     * so every hop gets the same SSRF check as the first target; blindly
+     * following a 302 would let it point anywhere unchecked. */
+    private ClientHttpResponse fetchFollowingRedirects(ProxyTarget target, String range) throws IOException {
+        String url = target.url();
+        for (int hop = 0; hop < MAX_REDIRECTS; hop++) {
+            guard.assertPublicTarget(url);
+            ClientHttpRequest request = factory.createRequest(URI.create(url), HttpMethod.GET);
+            request.getHeaders().set(HttpHeaders.USER_AGENT, BROWSER_UA);
+            target.headers().forEach(request.getHeaders()::set);
+            if (range != null) request.getHeaders().set(HttpHeaders.RANGE, range);
+            ClientHttpResponse response = request.execute();
+
+            String location = response.getHeaders().getFirst(HttpHeaders.LOCATION);
+            if (!REDIRECT_STATUSES.contains(response.getStatusCode().value()) || location == null) {
+                return response;
+            }
+            response.close();
+            url = URI.create(url).resolve(location).toString();
+        }
+        throw new IOException("too many redirects: " + target.url());
     }
 
     /** Small pause between a failed fetch and its one retry — enough for a
@@ -185,6 +213,17 @@ public class StreamProxyService {
     private static void copy(ClientHttpResponse from, HttpHeaders to, String name) {
         String value = from.getHeaders().getFirst(name);
         if (value != null) to.set(name, value);
+    }
+
+    /** Disables java.net's automatic redirect-following so every hop goes
+     * through our own loop and gets the SSRF check — the default would
+     * follow silently and bypass it entirely. */
+    private static final class ManualRedirectRequestFactory extends SimpleClientHttpRequestFactory {
+        @Override
+        protected void prepareConnection(HttpURLConnection connection, String httpMethod) throws IOException {
+            super.prepareConnection(connection, httpMethod);
+            connection.setInstanceFollowRedirects(false);
+        }
     }
 
     private record ProxyTarget(String url, Map<String, String> headers) {}
