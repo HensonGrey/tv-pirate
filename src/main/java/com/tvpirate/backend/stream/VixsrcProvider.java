@@ -99,10 +99,13 @@ public class VixsrcProvider implements StreamProvider {
             if (master == null) return List.of();
 
             List<StreamSource> sources = new ArrayList<>();
+            URI masterUri = URI.create(masterUrl);
             Matcher matcher = RENDITION_PATTERN.matcher(master);
             while (matcher.find()) {
                 int height = Integer.parseInt(matcher.group(1));
-                sources.add(new StreamSource(height + "p", matcher.group(2).trim(),
+                // Rendition lines are sometimes relative to the master playlist's own URL.
+                String renditionUrl = masterUri.resolve(matcher.group(2).trim()).toString();
+                sources.add(new StreamSource(height + "p", renditionUrl,
                         playbackHeaders(BASE_URL + apiUrl), "hls"));
             }
             if (sources.isEmpty()) {
