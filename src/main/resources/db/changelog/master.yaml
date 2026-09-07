@@ -17,3 +17,6 @@ databaseChangeLog:
   - include:
       file: 0006-touch-triggers.xml
       relativeToChangelogFile: true
+  - include:
+      file: 0007-hot-query-indexes.sql
+      relativeToChangelogFile: true
