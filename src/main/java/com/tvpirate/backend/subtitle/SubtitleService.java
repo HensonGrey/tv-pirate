@@ -41,7 +41,6 @@ public class SubtitleService {
     private static final String USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 
-    private static final Path CACHE_DIR = Path.of("data", "subtitles");
     private static final Duration CACHE_TTL = Duration.ofDays(30);
 
     /** SRT timestamps use commas, VTT wants dots — only timestamp lines change. */
@@ -50,9 +49,12 @@ public class SubtitleService {
     private final RestClient api;
     private final RestClient fileFetcher;
     private final boolean apiKeyConfigured;
+    private final Path cacheDir;
 
-    public SubtitleService(@Value("${opensubtitles.api-key:}") String apiKey) {
+    public SubtitleService(@Value("${opensubtitles.api-key:}") String apiKey,
+                           @Value("${app.subtitle-cache-dir:data/subtitles}") String cacheDir) {
         this.apiKeyConfigured = apiKey != null && !apiKey.isBlank();
+        this.cacheDir = Path.of(cacheDir);
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(5));
         factory.setReadTimeout(Duration.ofSeconds(10));
@@ -107,7 +109,7 @@ public class SubtitleService {
             content = toVtt(content);
             cleanupExpired();
             try {
-                Files.createDirectories(CACHE_DIR);
+                Files.createDirectories(cacheDir);
                 Files.write(cached, content);
             } catch (IOException e) {
                 // Serving beats caching — the download still worked.
@@ -178,10 +180,10 @@ public class SubtitleService {
 
     /** Cache file per subtitle file_id — quota-safe: re-resolving a title
      * that maps to the same file never downloads again. */
-    private static Path cachePath(long tmdbId, String mediaType, Integer season, Integer episode, String lang, Entry best) {
+    private Path cachePath(long tmdbId, String mediaType, Integer season, Integer episode, String lang, Entry best) {
         String s = season == null ? "x" : String.valueOf(season);
         String e = episode == null ? "x" : String.valueOf(episode);
-        return CACHE_DIR.resolve(String.format("%d-%s-s%se%s-%s-%d.vtt", tmdbId, mediaType, s, e, lang, best.fileId()));
+        return cacheDir.resolve(String.format("%d-%s-s%se%s-%s-%d.vtt", tmdbId, mediaType, s, e, lang, best.fileId()));
     }
 
     /** WEBVTT passes through; SRT gets the header plus dot timestamps. */
@@ -199,7 +201,7 @@ public class SubtitleService {
     /** Lazy sweep after each successful download: drop cache files past the
      * TTL. The dir stays tiny — worst case a few stale files linger. */
     private void cleanupExpired() {
-        try (var paths = Files.list(CACHE_DIR)) {
+        try (var paths = Files.list(cacheDir)) {
             Instant cutoff = Instant.now().minus(CACHE_TTL);
             paths.filter(Files::isRegularFile)
                     .forEach(path -> {
