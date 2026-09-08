@@ -18,6 +18,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.tvpirate.backend.progress.ProgressService;
 import com.tvpirate.backend.progress.dto.ProgressRowDto;
@@ -120,19 +121,19 @@ class WatchProgressUpsertIT {
     }
 
     @Test
-    void aTvHeartbeatWithoutCoordinatesCannotUpsert() {
-        // Documents why ProgressController's "season and episode are required
-        // for tv" guard is load-bearing: a coordinate-less tv row lands outside
-        // uq_watch_progress_tv (the arbiter) but inside uq_watch_progress_movie,
-        // so the second one raises a unique violation rather than updating.
+    void aTvHeartbeatWithoutCoordinatesIsRejectedBeforeItReachesTheTable() {
+        // A coordinate-less tv row would land outside uq_watch_progress_tv (its
+        // arbiter) but inside uq_watch_progress_movie, so the second one used to
+        // raise a unique violation — a 500. The service now rejects it itself,
+        // so the invariant no longer depends on the controller guarding it.
         SaveProgressRequest coordinateless =
                 new SaveProgressRequest(SHOW_TMDB_ID, "tv", null, null, 120, 2700);
-        progressService.upsert(userId, coordinateless);
 
         assertThatThrownBy(() -> progressService.upsert(userId, coordinateless))
-                .hasMessageContaining("uq_watch_progress_movie");
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("season and episode are required for tv");
 
-        assertThat(rowCount()).isEqualTo(1); // no duplicate slipped through either
+        assertThat(rowCount()).isZero(); // rejected before the insert, not after
     }
 
     @Test

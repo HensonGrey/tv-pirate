@@ -3,8 +3,10 @@ package com.tvpirate.backend.progress;
 import java.time.Instant;
 import java.util.List;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.tvpirate.backend.progress.dto.ProgressRowDto;
 import com.tvpirate.backend.progress.dto.SaveProgressRequest;
@@ -30,6 +32,15 @@ public class ProgressService {
         // Sub-5-second plays are noise (accidental opens) — never create a row.
         if (request.progressSeconds() < 5) {
             return;
+        }
+        // A tv row without coordinates lands outside uq_watch_progress_tv but
+        // inside uq_watch_progress_movie, so the second one raises 23505 (a 500).
+        // The controller rejects this first; guarded here too because the
+        // invariant belongs next to the statement that depends on it.
+        if ("tv".equals(request.mediaType())
+                && (request.season() == null || request.episode() == null)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "season and episode are required for tv");
         }
         Instant now = Instant.now();
         if ("tv".equals(request.mediaType())) {

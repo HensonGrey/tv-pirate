@@ -13,7 +13,10 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshTokenEntity
 
     long deleteByTokenHash(String tokenHash); // logout: burn one token by hash
 
-    void deleteAllByUser(UserEntity user); // future logout / cleanup
+    // Redundant with ON DELETE CASCADE for a user delete; kept for an explicit
+    // "log out everywhere" that revokes tokens without touching the account.
+    void deleteAllByUser(UserEntity user);
 
-    void deleteAllByExpiresAtBefore(Instant cutoff); // future scheduled cleanup
+    /** Returns how many were pruned, so the nightly sweep can log it. */
+    long deleteAllByExpiresAtBefore(Instant cutoff);
 }
