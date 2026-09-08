@@ -7,6 +7,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -15,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.tvpirate.backend.auth.dto.AuthResponse;
 import com.tvpirate.backend.auth.dto.UserDto;
+import com.tvpirate.backend.security.AuthedUser;
 
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -42,7 +44,12 @@ public class AuthController {
     // SECURITY NOTE: guest = DB row + token pair with no credentials — a DoS
     // weak spot until rate limiting exists. vault:auth-deep-dive#guest-dos
     @PostMapping("/guest")
-    public UserDto guest(HttpServletResponse response) {
+    public UserDto guest(Authentication authentication, HttpServletResponse response) {
+        // Already signed in: hand back the current session instead of piling
+        // up a fresh user + refresh-token row on every double-click or retry.
+        if (authentication != null && authentication.getPrincipal() instanceof AuthedUser existing) {
+            return new UserDto(existing.id(), existing.username(), existing.provider(), existing.profilePictureUrl());
+        }
         AuthResponse auth = authService.loginAsGuest();
         setAuthCookies(response, auth);
         return auth.user();
