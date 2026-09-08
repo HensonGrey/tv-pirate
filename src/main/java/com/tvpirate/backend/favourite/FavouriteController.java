@@ -40,7 +40,7 @@ public class FavouriteController {
     @PutMapping
     public ResponseEntity<Void> add(@RequestBody AddFavouriteRequest request,
                                     Authentication authentication) {
-        if (!request.mediaType().equals("movie") && !request.mediaType().equals("tv")) {
+        if (!"movie".equals(request.mediaType()) && !"tv".equals(request.mediaType())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "mediaType must be movie or tv");
         }
         AuthedUser principal = (AuthedUser) authentication.getPrincipal();

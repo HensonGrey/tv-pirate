@@ -67,7 +67,7 @@ public class ProgressController {
     }
 
     private static void validate(SaveProgressRequest request) {
-        if (!request.mediaType().equals("movie") && !request.mediaType().equals("tv")) {
+        if (!"movie".equals(request.mediaType()) && !"tv".equals(request.mediaType())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "mediaType must be movie or tv");
         }
         if (request.mediaType().equals("tv") && (request.season() == null || request.episode() == null)) {
