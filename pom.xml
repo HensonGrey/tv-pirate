@@ -46,6 +46,13 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
+		<!-- /actuator/health — lets systemd/a reverse proxy/an uptime check tell
+		     "up" from "up but the DB never came back after a power cut". Only
+		     health is exposed (see application.properties). -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
 
 		<!-- JWT creation/parsing -->
 		<dependency>

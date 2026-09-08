@@ -53,6 +53,11 @@ public class SecurityConfig {
                         // cross-origin — the unguessable, short-lived proxy token IS
                         // the credential (signed-URL pattern). vault:streaming-providers-deep-dive#architecture
                         .requestMatchers("/api/stream/proxy/**").permitAll()
+                        // Health only — everything else under /actuator stays
+                        // authenticated-or-nothing like the rest of the API (moot
+                        // today since only health is exposed at all, see
+                        // application.properties, but this is the backstop).
+                        .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll() // CORS preflight
                         // ERROR dispatches pass this chain too, and the JWT filter skips
                         // them — without this, errors mask as 401. vault:auth-deep-dive#error-dispatch
