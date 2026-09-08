@@ -15,6 +15,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.tvpirate.backend.auth.AuthService;
+import com.tvpirate.backend.auth.RefreshTokenCleanupService;
 import com.tvpirate.backend.auth.RefreshTokenEntity;
 import com.tvpirate.backend.auth.RefreshTokenRepository;
 import com.tvpirate.backend.auth.dto.AuthResponse;
@@ -43,6 +44,9 @@ class RefreshTokenRepositoryIT {
 
     @Autowired
     private AuthService authService;
+
+    @Autowired
+    private RefreshTokenCleanupService cleanupService;
 
     @Autowired
     private JdbcTemplate jdbc;
@@ -122,6 +126,21 @@ class RefreshTokenRepositoryIT {
         assertThat(repository.findAll()).hasSize(1); // the burned row is gone, not orphaned
         assertThatThrownBy(() -> authService.refresh(issued.refreshToken()))
                 .hasMessageContaining("Invalid refresh token");
+    }
+
+    @Test
+    void theNightlySweepPrunesExpiredTokensAndSparesLiveOnes() {
+        // Before RefreshTokenCleanupService nothing called this: the guest sweep
+        // only removes tokens of guests it deletes, so a provider-backed session
+        // abandoned without a logout kept its row forever.
+        repository.save(new RefreshTokenEntity("expired-a", owner, in(-3)));
+        repository.save(new RefreshTokenEntity("expired-b", bystander, in(-1)));
+        repository.save(new RefreshTokenEntity("still-live", owner, in(30)));
+
+        cleanupService.pruneExpiredTokens();
+
+        assertThat(repository.findAll()).singleElement()
+                .satisfies(row -> assertThat(row.getTokenHash()).isEqualTo("still-live"));
     }
 
     private static Instant in(int days) {
