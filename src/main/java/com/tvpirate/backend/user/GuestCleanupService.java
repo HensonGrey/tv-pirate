@@ -13,8 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** Daily sweep of abandoned guest accounts: free Postgres tiers are small,
  * so guests with no activity for the retention window are deleted with
- * everything they own. Also callable manually (AdminController) for hosts
- * where the scheduler can't fire. vault:guest-cleanup-deep-dive#cron */
+ * everything they own. vault:guest-cleanup-deep-dive#cron */
 @Service
 public class GuestCleanupService {
 
