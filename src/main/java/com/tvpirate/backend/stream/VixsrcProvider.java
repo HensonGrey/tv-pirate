@@ -34,12 +34,12 @@ public class VixsrcProvider implements StreamProvider {
 
     /** The embed page writes token/expires/url as JS assignments. The lookbehind on url
      *  matches only the bare `url:` line — not the quoted `"url"` key inside window.streams. */
-    private static final Pattern TOKEN_PATTERN = Pattern.compile("['\"]token['\"]\\s*:\\s*['\"]([^'\"]+)['\"]");
-    private static final Pattern EXPIRES_PATTERN = Pattern.compile("['\"]expires['\"]\\s*:\\s*['\"]([^'\"]+)['\"]");
-    private static final Pattern URL_PATTERN = Pattern.compile("(?<![\\w'\"])url\\s*:\\s*['\"]([^'\"]+)['\"]");
+    static final Pattern TOKEN_PATTERN = Pattern.compile("['\"]token['\"]\\s*:\\s*['\"]([^'\"]+)['\"]");
+    static final Pattern EXPIRES_PATTERN = Pattern.compile("['\"]expires['\"]\\s*:\\s*['\"]([^'\"]+)['\"]");
+    static final Pattern URL_PATTERN = Pattern.compile("(?<![\\w'\"])url\\s*:\\s*['\"]([^'\"]+)['\"]");
 
     /** Master playlist renditions: each RESOLUTION line is followed by its variant URL. */
-    private static final Pattern RENDITION_PATTERN =
+    static final Pattern RENDITION_PATTERN =
             Pattern.compile("#EXT-X-STREAM-INF:[^\\n]*RESOLUTION=\\d+x(\\d+)[^\\n]*\\n([^\\n]+)");
 
     private final RestClient client;
@@ -121,13 +121,13 @@ public class VixsrcProvider implements StreamProvider {
         }
     }
 
-    private static String match(Pattern pattern, String html) {
+    static String match(Pattern pattern, String html) {
         Matcher matcher = pattern.matcher(html);
         return matcher.find() ? matcher.group(1) : null;
     }
 
     /** Tokens are seconds since epoch; anything past its expiry (minus a 60s grace) is dead on arrival. */
-    private static boolean expired(String expires) {
+    static boolean expired(String expires) {
         try {
             return Long.parseLong(expires) * 1000L - 60_000 < System.currentTimeMillis();
         } catch (NumberFormatException e) {
@@ -140,7 +140,7 @@ public class VixsrcProvider implements StreamProvider {
         return Map.of("Referer", apiUrl, "User-Agent", USER_AGENT);
     }
 
-    private static int qualityNumber(String quality) {
+    static int qualityNumber(String quality) {
         try {
             return Integer.parseInt(quality.replace("p", ""));
         } catch (NumberFormatException e) {

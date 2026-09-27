@@ -219,7 +219,7 @@ public class VideasyProvider implements StreamProvider {
     }
 
     /** One generator round per 4 output bytes, exactly like their JS. */
-    private static byte[] keystream(String seed, long mediaId, int length) {
+    static byte[] keystream(String seed, long mediaId, int length) {
         State st = state(seed, mediaId);
         int[] s = st.s();
         boolean[] filled = st.filled();
@@ -247,7 +247,7 @@ public class VideasyProvider implements StreamProvider {
     }
 
     /** Base64 → XOR keystream → verify "mvm1" magic → the JSON after it. */
-    private static String decrypt(String payload, String seed, long mediaId) {
+    static String decrypt(String payload, String seed, long mediaId) {
         String b64 = payload.replace("-", "+").replace("_", "/");
         while (b64.length() % 4 != 0) b64 += "=";
         byte[] cipher = Base64.getDecoder().decode(b64);
