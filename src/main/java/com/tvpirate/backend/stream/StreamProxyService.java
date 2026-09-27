@@ -191,7 +191,7 @@ public class StreamProxyService {
      * resolving relative ones against the playlist's own URL. The child
      * inherits the parent's headers — the referer requirement applies to
      * init maps and segments exactly like it applies to the playlist. */
-    private byte[] rewritePlaylist(byte[] body, ProxyTarget target) throws IOException {
+    byte[] rewritePlaylist(byte[] body, ProxyTarget target) throws IOException {
         URI parent = URI.create(target.url());
         List<String> rewritten = new ArrayList<>();
         for (String line : new String(body, StandardCharsets.UTF_8).split("\\r?\\n", -1)) {
@@ -232,5 +232,5 @@ public class StreamProxyService {
         }
     }
 
-    private record ProxyTarget(String url, Map<String, String> headers) {}
+    record ProxyTarget(String url, Map<String, String> headers) {}
 }
