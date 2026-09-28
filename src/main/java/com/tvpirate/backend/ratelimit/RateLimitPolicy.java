@@ -10,48 +10,30 @@ import java.util.List;
 
 import io.github.bucket4j.Bandwidth;
 
-/**
- * Every rate-limit number in the app, in one place. Guest numbers are the
- * base; an account gets {@link #ACCOUNT_MULTIPLIER}× burst and refill on the
- * user-keyed policies. Network-keyed policies and the at-once caps are the
- * same for everyone — the caps protect Tomcat threads, not a user's share.
- * vault:rate-limiting-deep-dive#policies
- */
+/** Every rate-limit number in the app. vault:rate-limiting-deep-dive#policies */
 public enum RateLimitPolicy {
 
-    /** POST /api/auth/guest — every call is a users + refresh_tokens insert. */
     GUEST_CREATE(Scope.NETWORK,
             List.of(Limit.greedy(3, 1, ofMinutes(20)), Limit.intervally(10, 10, ofDays(1))),
             Limit.greedy(60, 60, ofHours(1)), 0, 0),
-    /** POST /api/auth/refresh and /logout. */
     AUTH_SESSION(Scope.NETWORK, List.of(Limit.greedy(10, 10, ofMinutes(1))), null, 0, 0),
-    /** GET /api/stream/sources — 3–9 gray-market provider calls each. */
     STREAM_RESOLVE(Scope.USER, List.of(Limit.greedy(10, 1, ofSeconds(6))),
             Limit.greedy(60, 60, ofMinutes(1)), 4, 8),
-    /** GET /api/subtitles — OpenSubtitles' quota is tiny. */
     SUBTITLES(Scope.USER, List.of(Limit.greedy(10, 10, ofMinutes(1))),
             Limit.greedy(60, 60, ofMinutes(1)), 4, 8),
-    /** GET /api/tmdb/search — two TMDB calls per cache miss. */
     TMDB_SEARCH(Scope.USER, List.of(Limit.greedy(15, 15, ofMinutes(1))), null, 0, 0),
-    /** The rest of /api/tmdb/** — the burst stays high because the Library tab
-     * fires one detail call per title at once. */
+    // High burst: the Library tab fires one detail call per title at once.
     TMDB(Scope.USER, List.of(Limit.greedy(150, 40, ofMinutes(1))), null, 0, 0),
-    /** Any /api route without an annotation: me, progress, favourites, providers. */
     DEFAULT(Scope.USER, List.of(Limit.greedy(30, 30, ofMinutes(1))), null, 0, 0);
 
-    /** Accounts (any provider but GUEST) get this many times a guest's budget. */
     public static final int ACCOUNT_MULTIPLIER = 3;
 
-    /** Stream lane (the playback proxy): never rate limited, only capped in
-     * flight. Together with the API caps above: 24 + 8 + 8 of Tomcat's 50
-     * threads — raise them with server.tomcat.threads.max. */
+    /** The playback proxy's in-flight caps (it's never rate limited); raise with server.tomcat.threads.max. */
     public static final int PROXY_IN_FLIGHT_PER_OWNER = 8;
     public static final int PROXY_IN_FLIGHT_TOTAL = 24;
 
-    /** What a bucket is keyed by: the signed-in user, or the client's network. */
     public enum Scope { USER, NETWORK }
 
-    /** Guest is the base tier; network-keyed policies only ever use it. */
     public enum Tier { GUEST, ACCOUNT }
 
     private final Scope scope;
