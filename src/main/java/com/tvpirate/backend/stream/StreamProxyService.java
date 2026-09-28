@@ -83,11 +83,17 @@ public class StreamProxyService {
      * here so every caller — the top-level source, and every URI pulled out
      * of a playlist by {@link #rewritePlaylist} — is checked before it's
      * even mintable, not just when it's later fetched. */
-    public String register(String url, Map<String, String> headers) {
+    public String register(String url, Map<String, String> headers, long ownerId) {
         guard.assertPublicTarget(url);
         String token = UUID.randomUUID().toString().replace("-", "");
-        targets.put(token, new ProxyTarget(url, headers));
+        targets.put(token, new ProxyTarget(url, headers, ownerId));
         return token;
+    }
+
+    /** The user whose resolve minted this token, or null if it's unknown or expired. */
+    public Long ownerOf(String token) {
+        ProxyTarget target = targets.getIfPresent(token);
+        return target == null ? null : target.ownerId();
     }
 
     /** Streams a registered target back: the browser's Range header goes
@@ -201,7 +207,7 @@ public class StreamProxyService {
             } else if (line.startsWith("#EXT-X-KEY") || line.startsWith("#EXT-X-MAP")) {
                 Matcher matcher = KEY_URI_PATTERN.matcher(line);
                 if (matcher.find()) {
-                    String child = register(parent.resolve(matcher.group(1)).toString(), target.headers());
+                    String child = register(parent.resolve(matcher.group(1)).toString(), target.headers(), target.ownerId());
                     rewritten.add(matcher.replaceFirst("URI=\"" + Matcher.quoteReplacement("/api/stream/proxy/" + child) + "\""));
                 } else {
                     rewritten.add(line);
@@ -210,7 +216,7 @@ public class StreamProxyService {
                 rewritten.add(line);
             } else {
                 // Plain URI line — resolve relative to the playlist, then proxy it.
-                String child = register(parent.resolve(line.trim()).toString(), target.headers());
+                String child = register(parent.resolve(line.trim()).toString(), target.headers(), target.ownerId());
                 rewritten.add("/api/stream/proxy/" + child);
             }
         }
@@ -233,5 +239,6 @@ public class StreamProxyService {
         }
     }
 
-    record ProxyTarget(String url, Map<String, String> headers) {}
+    /** ownerId: the user whose resolve minted it — every child ticket inherits it, so the proxy's in-flight cap is per viewer. */
+    record ProxyTarget(String url, Map<String, String> headers, long ownerId) {}
 }

@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -15,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.tvpirate.backend.ratelimit.RateLimitPolicy;
 import com.tvpirate.backend.ratelimit.RateLimited;
+import com.tvpirate.backend.security.AuthedUser;
 import com.tvpirate.backend.stream.StreamProvider.ResolveRequest;
 import com.tvpirate.backend.stream.StreamProvider.StreamSource;
 import com.tvpirate.backend.stream.dto.SourceDto;
@@ -49,7 +51,8 @@ public class StreamController {
                                    @RequestParam String type,
                                    @RequestParam long tmdbId,
                                    @RequestParam(required = false) Integer season,
-                                   @RequestParam(required = false) Integer episode) {
+                                   @RequestParam(required = false) Integer episode,
+                                   Authentication authentication) {
         if (!type.equals("movie") && !type.equals("tv")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "type must be movie or tv");
         }
@@ -63,9 +66,10 @@ public class StreamController {
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
+        long ownerId = ((AuthedUser) authentication.getPrincipal()).id();
         return resolved.stream()
                 .map(source -> new SourceDto(source.quality(), source.format(),
-                        "/api/stream/proxy/" + proxyService.register(source.url(), source.headers())))
+                        "/api/stream/proxy/" + proxyService.register(source.url(), source.headers(), ownerId)))
                 .toList();
     }
 
