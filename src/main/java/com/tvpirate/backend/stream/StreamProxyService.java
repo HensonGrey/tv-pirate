@@ -58,6 +58,7 @@ public class StreamProxyService {
     private static final int MAX_REDIRECTS = 5;
     private static final Set<Integer> REDIRECT_STATUSES = Set.of(301, 302, 303, 307, 308);
 
+    // Known issue: playlist rewrites fill this store faster than it expires. vault:stream-proxy-deep-dive#token-store-churn
     private final Cache<String, ProxyTarget> targets;
     private final ManualRedirectRequestFactory factory;
     private final PublicTargetGuard guard;
