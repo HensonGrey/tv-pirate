@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.tvpirate.backend.ratelimit.RateLimitPolicy;
+import com.tvpirate.backend.ratelimit.RateLimited;
 import com.tvpirate.backend.tmdb.dto.GenreInfo;
 import com.tvpirate.backend.tmdb.dto.MediaItem;
 import com.tvpirate.backend.tmdb.dto.PageResponse;
@@ -24,6 +26,7 @@ import com.tvpirate.backend.tmdb.dto.SeasonInfo;
  * literal over the path variable. */
 @RestController
 @RequestMapping("/api/tmdb")
+@RateLimited(RateLimitPolicy.TMDB)
 public class TmdbController {
 
     private static final int MAX_PAGE = 500; // TMDB caps results at 500 pages
@@ -69,6 +72,7 @@ public class TmdbController {
 
     /** Title search across movies + shows (people never enter the results). */
     @GetMapping("/search")
+    @RateLimited(RateLimitPolicy.TMDB_SEARCH)
     public ResponseEntity<PageResponse<MediaItem>> search(@RequestParam String query,
                                           @RequestParam(defaultValue = "1") int page) {
         if (query == null || query.isBlank()) {

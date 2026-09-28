@@ -16,6 +16,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.tvpirate.backend.auth.dto.AuthResponse;
 import com.tvpirate.backend.auth.dto.UserDto;
+import com.tvpirate.backend.ratelimit.RateLimitPolicy;
+import com.tvpirate.backend.ratelimit.RateLimited;
 import com.tvpirate.backend.security.AuthedUser;
 
 import jakarta.servlet.http.HttpServletResponse;
@@ -26,6 +28,7 @@ import jakarta.servlet.http.HttpServletResponse;
  * reading them, which is why logout is an endpoint. vault:auth-deep-dive#cookies */
 @RestController
 @RequestMapping("/api/auth")
+@RateLimited(RateLimitPolicy.AUTH_SESSION)
 public class AuthController {
 
     private static final String ACCESS_COOKIE = "access_token";
@@ -41,9 +44,9 @@ public class AuthController {
         this.cookieSecure = cookieSecure;
     }
 
-    // SECURITY NOTE: guest = DB row + token pair with no credentials — a DoS
-    // weak spot until rate limiting exists. vault:auth-deep-dive#guest-dos
+    // A DB row + token pair with no credentials, so the strictest limit. vault:rate-limiting-deep-dive#policies
     @PostMapping("/guest")
+    @RateLimited(RateLimitPolicy.GUEST_CREATE)
     public UserDto guest(Authentication authentication, HttpServletResponse response) {
         // Already signed in: hand back the current session instead of piling
         // up a fresh user + refresh-token row on every double-click or retry.

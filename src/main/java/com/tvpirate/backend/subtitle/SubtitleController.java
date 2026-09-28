@@ -14,12 +14,16 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.tvpirate.backend.ratelimit.RateLimitPolicy;
+import com.tvpirate.backend.ratelimit.RateLimited;
+
 /** The subtitle endpoint: one VTT track per title/episode, resolved and
  * cached server-side so the OpenSubtitles key never reaches the browser.
  * The player lazy-loads it as a <track> element; a miss just means the
  * player runs without captions. vault:streaming-providers-deep-dive#subtitles */
 @RestController
 @RequestMapping("/api/subtitles")
+@RateLimited(RateLimitPolicy.SUBTITLES)
 public class SubtitleController {
 
     /** Language codes only — anything else is a typo'd request, not a search. */

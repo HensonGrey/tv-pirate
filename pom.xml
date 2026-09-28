@@ -92,6 +92,14 @@
 			<artifactId>caffeine</artifactId>
 		</dependency>
 
+		<!-- Token buckets for the API rate limits (ratelimit package) — in-memory,
+		     one JVM, no Redis. vault:rate-limiting-deep-dive#lanes -->
+		<dependency>
+			<groupId>com.bucket4j</groupId>
+			<artifactId>bucket4j_jdk17-core</artifactId>
+			<version>8.20.0</version>
+		</dependency>
+
 		<!-- Versioned DB migrations with rollback support (see src/main/resources/db/changelog).
 		     The starter (not bare liquibase-core) is required in Boot 4.x: it pulls
 		     the spring-boot-liquibase auto-configuration module. -->

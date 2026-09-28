@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.tvpirate.backend.ratelimit.RateLimitPolicy;
+import com.tvpirate.backend.ratelimit.RateLimited;
 import com.tvpirate.backend.stream.StreamProvider.ResolveRequest;
 import com.tvpirate.backend.stream.StreamProvider.StreamSource;
 import com.tvpirate.backend.stream.dto.SourceDto;
@@ -42,6 +44,7 @@ public class StreamController {
     /** Resolve exactly the named provider; each source comes back as a
      * proxied URL — the real one (and its referer headers) never leaves. */
     @GetMapping("/sources")
+    @RateLimited(RateLimitPolicy.STREAM_RESOLVE)
     public List<SourceDto> sources(@RequestParam String provider,
                                    @RequestParam String type,
                                    @RequestParam long tmdbId,
