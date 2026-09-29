@@ -54,11 +54,15 @@ public class AuthService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid refresh token"));
 
         if (stored.getExpiresAt().isBefore(Instant.now())) {
-            refreshTokenRepository.delete(stored);
+            refreshTokenRepository.burn(stored.getId());
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token expired");
         }
 
-        refreshTokenRepository.delete(stored); // burn the old token
+        // Two tabs refreshing with the same cookie both find the row; the atomic burn lets
+        // exactly one win, and the other gets a plain 401 (the frontend then re-checks the session).
+        if (refreshTokenRepository.burn(stored.getId()) == 0) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token already used");
+        }
         return issueTokens(stored.getUser());
     }
 
