@@ -49,15 +49,20 @@ public class TmdbConfig {
                 .build();
     }
 
-    /** One cache per data kind with its own TTL: lists 10 min, details and
+    /** One cache per data kind with its own TTL: lists 10 min, details, IMDb ids and
      * genre tables 24 h, image config 7 days. maximumSize keeps memory bounded. */
     @Bean
     CaffeineCacheManager cacheManager() {
         CaffeineCacheManager manager = new CaffeineCacheManager();
+        // Any cache a @Cacheable names but nobody registers below is built from this —
+        // Caffeine's own default is unbounded and never expires.
+        manager.setCaffeine(Caffeine.newBuilder().expireAfterWrite(Duration.ofHours(24)).maximumSize(1000));
         register(manager, "trending", 10, 100);
         register(manager, "discover", 10, 100);
         register(manager, "search", 10, 100);
         register(manager, "tmdb-detail", 1440, 1000);
+        // Also caches "no IMDb id" (null), so it must expire: TMDB fills ids in later.
+        register(manager, "tmdb-imdb-id", 1440, 5000);
         register(manager, "tmdb-genres", 1440, 2);
         register(manager, "tmdb-image-config", 10080, 1);
         return manager;
