@@ -13,6 +13,7 @@ import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -23,6 +24,8 @@ import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 
 /**
  * OpenSubtitles proxy: search by TMDB id, download once, serve from a local
@@ -42,35 +45,54 @@ public class SubtitleService {
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 
     private static final Duration CACHE_TTL = Duration.ofDays(30);
+    private static final Duration MISS_TTL = Duration.ofHours(12);
 
     /** SRT timestamps use commas, VTT wants dots — only timestamp lines change. */
     private static final Pattern SRT_TIME = Pattern.compile("(\\d{2}:\\d{2}:\\d{2}),(\\d{3})");
 
+    /** Titles with nothing usable (no match, or only formats browsers can't show), so
+     * re-opening one doesn't search again; forgotten after MISS_TTL — new subs do appear. */
+    private final Cache<String, Boolean> misses = Caffeine.newBuilder()
+            .expireAfterWrite(MISS_TTL)
+            .maximumSize(10_000)
+            .build();
     private final RestClient api;
     private final RestClient fileFetcher;
     private final boolean apiKeyConfigured;
     private final Path cacheDir;
 
+    @Autowired
     public SubtitleService(@Value("${opensubtitles.api-key:}") String apiKey,
                            @Value("${app.subtitle-cache-dir:data/subtitles}") String cacheDir) {
-        this.apiKeyConfigured = apiKey != null && !apiKey.isBlank();
-        this.cacheDir = Path.of(cacheDir);
+        this(apiKey != null && !apiKey.isBlank(), Path.of(cacheDir),
+                RestClient.builder()
+                        .baseUrl(BASE_URL)
+                        .requestFactory(requestFactory())
+                        .defaultHeader("Api-Key", apiKey)
+                        .defaultHeader("User-Agent", USER_AGENT)
+                        .defaultHeader("Content-Type", "application/json")
+                        .build(),
+                // The download link is an arbitrary one-shot CDN URL — it gets no
+                // Api-Key header, so the key never leaves OpenSubtitles' API host.
+                RestClient.builder()
+                        .requestFactory(requestFactory())
+                        .defaultHeader("User-Agent", USER_AGENT)
+                        .build());
+    }
+
+    /** Tests hand in clients bound to a fake OpenSubtitles. */
+    SubtitleService(boolean apiKeyConfigured, Path cacheDir, RestClient api, RestClient fileFetcher) {
+        this.apiKeyConfigured = apiKeyConfigured;
+        this.cacheDir = cacheDir;
+        this.api = api;
+        this.fileFetcher = fileFetcher;
+    }
+
+    private static SimpleClientHttpRequestFactory requestFactory() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(5));
         factory.setReadTimeout(Duration.ofSeconds(10));
-        this.api = RestClient.builder()
-                .baseUrl(BASE_URL)
-                .requestFactory(factory)
-                .defaultHeader("Api-Key", apiKey)
-                .defaultHeader("User-Agent", USER_AGENT)
-                .defaultHeader("Content-Type", "application/json")
-                .build();
-        // The download link is an arbitrary one-shot CDN URL — it gets no
-        // Api-Key header, so the key never leaves OpenSubtitles' API host.
-        this.fileFetcher = RestClient.builder()
-                .requestFactory(factory)
-                .defaultHeader("User-Agent", USER_AGENT)
-                .build();
+        return factory;
     }
 
     /** The subtitle track for one title/episode as VTT bytes — 404 when
@@ -80,6 +102,14 @@ public class SubtitleService {
         if (!apiKeyConfigured) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "OpenSubtitles API key not configured — add OPENSUBTITLES_API_KEY to backend/.env");
+        }
+        String title = titleKey(tmdbId, mediaType, season, episode, lang);
+        byte[] onDisk = readCached(title);
+        if (onDisk != null) {
+            return onDisk;
+        }
+        if (misses.getIfPresent(title) != null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "no subtitles found");
         }
         try {
             SearchResponse search = api.get()
@@ -100,11 +130,7 @@ public class SubtitleService {
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND, "no subtitles found");
             }
 
-            Path cached = cachePath(tmdbId, mediaType, season, episode, lang, best);
-            if (Files.exists(cached)) {
-                return Files.readAllBytes(cached);
-            }
-
+            Path cached = cacheDir.resolve(title + "-" + best.fileId() + ".vtt");
             byte[] content = download(best);
             content = toVtt(content);
             cleanupExpired();
@@ -117,6 +143,9 @@ public class SubtitleService {
             }
             return content;
         } catch (ResponseStatusException e) {
+            if (e.getStatusCode().value() == HttpStatus.NOT_FOUND.value()) {
+                misses.put(title, Boolean.TRUE); // nothing usable: don't search (or spend quota) again for a while
+            }
             throw e;
         } catch (RestClientResponseException e) {
             log.warn("OpenSubtitles answered with status {}", e.getStatusCode().value(), e);
@@ -131,7 +160,7 @@ public class SubtitleService {
             }
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "OpenSubtitles is not answering right now — try again shortly");
-        } catch (RestClientException | IOException e) {
+        } catch (RestClientException e) {
             log.warn("OpenSubtitles call failed", e);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "OpenSubtitles is unreachable — try again shortly");
@@ -178,12 +207,25 @@ public class SubtitleService {
                 .body(byte[].class);
     }
 
-    /** Cache file per subtitle file_id — quota-safe: re-resolving a title
-     * that maps to the same file never downloads again. */
-    private Path cachePath(long tmdbId, String mediaType, Integer season, Integer episode, String lang, Entry best) {
+    /** One title/episode/language, e.g. "1396-tv-s1e2-en"; its cache file is "<key>-<file_id>.vtt". */
+    private static String titleKey(long tmdbId, String mediaType, Integer season, Integer episode, String lang) {
         String s = season == null ? "x" : String.valueOf(season);
         String e = episode == null ? "x" : String.valueOf(episode);
-        return cacheDir.resolve(String.format("%d-%s-s%se%s-%s-%d.vtt", tmdbId, mediaType, s, e, lang, best.fileId()));
+        return String.format("%d-%s-s%se%s-%s", tmdbId, mediaType, s, e, lang);
+    }
+
+    /** The cached track for a title, found by name before any search — so a
+     * hit costs no OpenSubtitles call. The file_id suffix must be digits only,
+     * or "pt" would pick up a "pt-BR" file. */
+    private byte[] readCached(String title) {
+        Pattern name = Pattern.compile(Pattern.quote(title) + "-\\d+\\.vtt");
+        try (var paths = Files.list(cacheDir)) {
+            Path hit = paths.filter(path -> name.matcher(path.getFileName().toString()).matches())
+                    .findFirst().orElse(null);
+            return hit == null ? null : Files.readAllBytes(hit);
+        } catch (IOException e) {
+            return null; // no cache dir yet, or an unreadable file: fall through to a search
+        }
     }
 
     /** WEBVTT passes through; SRT gets the header plus dot timestamps. */
