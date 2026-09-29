@@ -63,7 +63,7 @@ class RateLimitInterceptorTest {
 
     @Test
     void theMethodAnnotationBeatsTheClassOne() throws Exception {
-        for (int i = 0; i < 15; i++) {
+        for (int i = 0; i < 30; i++) {
             assertThat(status(get("/api/tmdb-like/search"))).isEqualTo(200);
         }
         assertThat(status(get("/api/tmdb-like/search"))).isEqualTo(429);

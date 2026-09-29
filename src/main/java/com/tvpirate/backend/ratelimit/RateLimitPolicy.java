@@ -21,7 +21,8 @@ public enum RateLimitPolicy {
             Limit.greedy(60, 60, ofMinutes(1)), 4, 8),
     SUBTITLES(Scope.USER, List.of(Limit.greedy(10, 10, ofMinutes(1))),
             Limit.greedy(60, 60, ofMinutes(1)), 4, 8),
-    TMDB_SEARCH(Scope.USER, List.of(Limit.greedy(15, 15, ofMinutes(1))), null, 0, 0),
+    // A search is two requests (movies + tv), one TMDB call each.
+    TMDB_SEARCH(Scope.USER, List.of(Limit.greedy(30, 30, ofMinutes(1))), null, 0, 0),
     // High burst: the Library tab fires one detail call per title at once.
     TMDB(Scope.USER, List.of(Limit.greedy(150, 40, ofMinutes(1))), null, 0, 0),
     DEFAULT(Scope.USER, List.of(Limit.greedy(30, 30, ofMinutes(1))), null, 0, 0);

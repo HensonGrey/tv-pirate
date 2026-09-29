@@ -23,27 +23,24 @@ public class TmdbClient {
         this.tmdb = tmdbRestClient;
     }
 
-    /** GET /trending/all/{window} — mixed movies + shows, sorted by popularity. */
-    public TmdbPage<TmdbEntry> trendingAll(String window, int page) {
-        return getPage("/trending/all/{window}", window, page);
-    }
-
-    /** Per-type search: /search/multi's people results bury the titles for
-     * short queries. vault:tmdb-deep-dive#search */
-    public TmdbPage<TmdbEntry> searchMovies(String query, int page) {
-        return searchPage("/search/movie", query, page);
-    }
-
-    public TmdbPage<TmdbEntry> searchShows(String query, int page) {
-        return searchPage("/search/tv", query, page);
-    }
-
-    private TmdbPage<TmdbEntry> searchPage(String path, String query, int page) {
+    /** GET /trending/{type}/{window} — movies or tv, sorted by popularity. */
+    public TmdbPage<TmdbEntry> trending(String type, String window, int page) {
         return tmdb.get()
-                .uri(builder -> builder.path(path)
+                .uri(builder -> builder.path("/trending/{type}/{window}")
+                        .queryParam("page", page)
+                        .build(type, window))
+                .retrieve()
+                .body(new ParameterizedTypeReference<TmdbPage<TmdbEntry>>() {});
+    }
+
+    /** GET /search/{type} — not /search/multi, whose people results bury the
+     * titles for short queries. vault:tmdb-deep-dive#search */
+    public TmdbPage<TmdbEntry> search(String type, String query, int page) {
+        return tmdb.get()
+                .uri(builder -> builder.path("/search/{type}")
                         .queryParam("query", query)
                         .queryParam("page", page)
-                        .build())
+                        .build(type))
                 .retrieve()
                 .body(new ParameterizedTypeReference<TmdbPage<TmdbEntry>>() {});
     }
@@ -115,15 +112,6 @@ public class TmdbClient {
                 .retrieve()
                 .body(ImageConfigurationResponse.class);
         return response == null ? null : response.images();
-    }
-
-    private TmdbPage<TmdbEntry> getPage(String pathTemplate, String window, int page) {
-        return tmdb.get()
-                .uri(builder -> builder.path(pathTemplate)
-                        .queryParam("page", page)
-                        .build(window))
-                .retrieve()
-                .body(new ParameterizedTypeReference<TmdbPage<TmdbEntry>>() {});
     }
 
     /** RestClient omits null query params — pass empty strings through as null. */

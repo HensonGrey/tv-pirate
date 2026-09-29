@@ -45,14 +45,16 @@ public class TmdbController {
         this.tmdbService = tmdbService;
     }
 
-    /** Mixed movies + shows trending right now. window = day|week. */
+    /** Movies or tv trending right now. window = day|week. */
     @GetMapping("/trending")
-    public ResponseEntity<PageResponse<MediaItem>> trending(@RequestParam(defaultValue = "day") String window,
+    public ResponseEntity<PageResponse<MediaItem>> trending(@RequestParam String type,
+                                            @RequestParam(defaultValue = "day") String window,
                                             @RequestParam(defaultValue = "1") int page) {
+        checkType(type);
         if (!window.equals("day") && !window.equals("week")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "window must be day or week");
         }
-        return cached(tmdbService.trending(window, checkPage(page)), LIST_TTL);
+        return cached(tmdbService.trending(type, window, checkPage(page)), LIST_TTL);
     }
 
     /** Popularity-sorted movies or tv, narrowed by genre names (OR semantics). */
@@ -70,15 +72,17 @@ public class TmdbController {
         return cached(tmdbService.discover(type, genreNames, checkPage(page)), LIST_TTL);
     }
 
-    /** Title search across movies + shows (people never enter the results). */
+    /** Title search in movies or tv (people never enter the results). */
     @GetMapping("/search")
     @RateLimited(RateLimitPolicy.TMDB_SEARCH)
-    public ResponseEntity<PageResponse<MediaItem>> search(@RequestParam String query,
+    public ResponseEntity<PageResponse<MediaItem>> search(@RequestParam String type,
+                                          @RequestParam String query,
                                           @RequestParam(defaultValue = "1") int page) {
+        checkType(type);
         if (query == null || query.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "query is required");
         }
-        return cached(tmdbService.search(query, checkPage(page)), LIST_TTL);
+        return cached(tmdbService.search(type, query, checkPage(page)), LIST_TTL);
     }
 
     /** Full detail for one title: runtime for movies, seasons/episodes for tv. */

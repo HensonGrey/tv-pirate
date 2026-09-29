@@ -52,10 +52,10 @@ public class TmdbService {
     /** Trending re-ranked by rating: best-rated first, no-votes-yet (null)
      * at the bottom. Sorted within the fetched page — a global ranking
      * would fetch all 500 pages first. vault:tmdb-deep-dive#trending-sort */
-    @Cacheable(cacheNames = "trending", key = "#window + ':' + #page")
-    public PageResponse<MediaItem> trending(String window, int page) {
+    @Cacheable(cacheNames = "trending", key = "#type + ':' + #window + ':' + #page")
+    public PageResponse<MediaItem> trending(String type, String window, int page) {
         return guarded(() -> {
-            PageResponse<MediaItem> mapped = mapPage(client.trendingAll(window, page), null);
+            PageResponse<MediaItem> mapped = mapPage(client.trending(type, window, page), type);
             List<MediaItem> sorted = new ArrayList<>(mapped.results());
             sorted.sort(Comparator.comparing(MediaItem::rating,
                     Comparator.nullsLast(Comparator.reverseOrder())));
@@ -86,32 +86,10 @@ public class TmdbService {
         });
     }
 
-    /** Title search: one page from each type index, interleaved so each
-     * list keeps its relevance order. vault:tmdb-deep-dive#search */
-    @Cacheable(cacheNames = "search", key = "#query + ':' + #page")
-    public PageResponse<MediaItem> search(String query, int page) {
-        return guarded(() -> {
-            String trimmed = query.trim();
-            var movies = client.searchMovies(trimmed, page);
-            var shows = client.searchShows(trimmed, page);
-            TmdbClient.ImageSettings images = client.imageConfig();
-            GenreLookup lookup = genreLookup();
-            // Per-type results carry no media_type — the request URL's type wins.
-            List<MediaItem> movieItems = movies.results().stream()
-                    .map(entry -> toItem(entry, "movie", lookup, images))
-                    .toList();
-            List<MediaItem> showItems = shows.results().stream()
-                    .map(entry -> toItem(entry, "tv", lookup, images))
-                    .toList();
-            List<MediaItem> merged = new ArrayList<>(movieItems.size() + showItems.size());
-            for (int i = 0; i < Math.max(movieItems.size(), showItems.size()); i++) {
-                if (i < movieItems.size()) merged.add(movieItems.get(i));
-                if (i < showItems.size()) merged.add(showItems.get(i));
-            }
-            return new PageResponse<>(page, merged,
-                    Math.max(movies.totalPages(), shows.totalPages()),
-                    movies.totalResults() + shows.totalResults());
-        });
+    /** Title search in one type's index, relevance order. vault:tmdb-deep-dive#search */
+    @Cacheable(cacheNames = "search", key = "#type + ':' + #query.trim() + ':' + #page")
+    public PageResponse<MediaItem> search(String type, String query, int page) {
+        return guarded(() -> mapPage(client.search(type, query.trim(), page), type));
     }
 
     /** Full detail for one title: runtime for movies, seasons/episodes for tv. */
