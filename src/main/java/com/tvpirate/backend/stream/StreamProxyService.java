@@ -58,15 +58,16 @@ public class StreamProxyService {
     private static final int MAX_REDIRECTS = 5;
     private static final Set<Integer> REDIRECT_STATUSES = Set.of(301, 302, 303, 307, 308);
 
-    // Known issue: playlist rewrites fill this store faster than it expires. vault:stream-proxy-deep-dive#token-store-churn
+    /** Root tickets only (1–6 per resolve); playlist children are sealed, never stored. */
     private final Cache<String, ProxyTarget> targets;
+    private final TicketSealer sealer = new TicketSealer();
     private final ManualRedirectRequestFactory factory;
     private final PublicTargetGuard guard;
 
     public StreamProxyService(PublicTargetGuard guard) {
         this.guard = guard;
-        // A 2 h movie is ~2000 segments, each with its own token — size the
-        // cache for a few concurrent movies.
+        // Resolves are rate limited, so roots stay far below this; W-TinyLFU
+        // keeps the ones being played (read on every chunk) if it's ever hit.
         this.targets = Caffeine.newBuilder()
                 .expireAfterWrite(TOKEN_TTL)
                 .maximumSize(20000)
@@ -78,22 +79,43 @@ public class StreamProxyService {
         this.factory.setReadTimeout(Duration.ofSeconds(20));
     }
 
-    /** One playable source → one capability token. The URL and its headers
-     * never reach the browser; the token is the only handle it gets. Guarded
-     * here so every caller — the top-level source, and every URI pulled out
-     * of a playlist by {@link #rewritePlaylist} — is checked before it's
-     * even mintable, not just when it's later fetched. */
+    /** One playable source → one root ticket. The URL and its headers never
+     * reach the browser; the ticket is the only handle it gets. Guarded here
+     * so a source is checked before it's even mintable, not just when fetched. */
     public String register(String url, Map<String, String> headers, long ownerId) {
         guard.assertPublicTarget(url);
         String token = UUID.randomUUID().toString().replace("-", "");
-        targets.put(token, new ProxyTarget(url, headers, ownerId));
+        targets.put(token, new ProxyTarget(url, headers, ownerId, token));
         return token;
     }
 
-    /** The user whose resolve minted this token, or null if it's unknown or expired. */
+    /** The user whose resolve minted this ticket (or its root), or null if it's unknown or expired. */
     public Long ownerOf(String token) {
-        ProxyTarget target = targets.getIfPresent(token);
+        ProxyTarget target = resolve(token);
         return target == null ? null : target.ownerId();
+    }
+
+    /** A root is looked up; a sealed child is opened and takes its root's headers
+     * and owner — so a child dies with its root, like any expired ticket. */
+    private ProxyTarget resolve(String token) {
+        if (!TicketSealer.isSealed(token)) {
+            return targets.getIfPresent(token);
+        }
+        TicketSealer.Unsealed child = sealer.unseal(token);
+        ProxyTarget root = child == null ? null : targets.getIfPresent(child.rootToken());
+        return root == null ? null : new ProxyTarget(child.childUrl(), root.headers(), root.ownerId(), root.rootToken());
+    }
+
+    /** A playlist child's ticket: SSRF-checked now, like a root, and sealed instead of stored. */
+    private String sealChild(String url, ProxyTarget parent) {
+        guard.assertPublicTarget(url);
+        return sealer.seal(parent.rootToken(), url);
+    }
+
+    /** Test hook: how many tickets the store holds. */
+    long storedTicketCount() {
+        targets.cleanUp();
+        return targets.estimatedSize();
     }
 
     /** Streams a registered target back: the browser's Range header goes
@@ -106,12 +128,12 @@ public class StreamProxyService {
      * always the URL the provider resolved.
      *
      * Playlists are the exception to streaming: every URI inside one is
-     * re-registered and rewritten to a new proxy token, so segments/
+     * rewritten to a sealed proxy ticket, so segments/
      * renditions never get fetched directly (their CDNs 403 requests
      * without the referer, which only we can replay). Playlists are small,
      * so buffering them is fine. */
     public ResponseEntity<InputStreamResource> stream(String token, String range) {
-        ProxyTarget target = targets.getIfPresent(token);
+        ProxyTarget target = resolve(token);
         if (target == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
@@ -194,10 +216,11 @@ public class StreamProxyService {
         }
     }
 
-    /** Rewrites every URI line (EXT-X-KEY, EXT-X-MAP) to a fresh proxy token,
+    /** Rewrites every URI line (EXT-X-KEY, EXT-X-MAP) to a sealed ticket,
      * resolving relative ones against the playlist's own URL. The child
-     * inherits the parent's headers — the referer requirement applies to
-     * init maps and segments exactly like it applies to the playlist. */
+     * traces back to the parent's root and so gets its headers — the referer
+     * requirement applies to init maps and segments exactly like it applies
+     * to the playlist. Nothing is stored. vault:stream-proxy-deep-dive#sealed-tickets */
     byte[] rewritePlaylist(byte[] body, ProxyTarget target) throws IOException {
         URI parent = URI.create(target.url());
         List<String> rewritten = new ArrayList<>();
@@ -207,7 +230,7 @@ public class StreamProxyService {
             } else if (line.startsWith("#EXT-X-KEY") || line.startsWith("#EXT-X-MAP")) {
                 Matcher matcher = KEY_URI_PATTERN.matcher(line);
                 if (matcher.find()) {
-                    String child = register(parent.resolve(matcher.group(1)).toString(), target.headers(), target.ownerId());
+                    String child = sealChild(parent.resolve(matcher.group(1)).toString(), target);
                     rewritten.add(matcher.replaceFirst("URI=\"" + Matcher.quoteReplacement("/api/stream/proxy/" + child) + "\""));
                 } else {
                     rewritten.add(line);
@@ -216,7 +239,7 @@ public class StreamProxyService {
                 rewritten.add(line);
             } else {
                 // Plain URI line — resolve relative to the playlist, then proxy it.
-                String child = register(parent.resolve(line.trim()).toString(), target.headers(), target.ownerId());
+                String child = sealChild(parent.resolve(line.trim()).toString(), target);
                 rewritten.add("/api/stream/proxy/" + child);
             }
         }
@@ -239,6 +262,7 @@ public class StreamProxyService {
         }
     }
 
-    /** ownerId: the user whose resolve minted it — every child ticket inherits it, so the proxy's in-flight cap is per viewer. */
-    record ProxyTarget(String url, Map<String, String> headers, long ownerId) {}
+    /** ownerId: the user whose resolve minted it — children inherit it, so the proxy's in-flight cap is per viewer.
+     * rootToken: the stored root this target traces back to (a root's is its own). */
+    record ProxyTarget(String url, Map<String, String> headers, long ownerId, String rootToken) {}
 }
