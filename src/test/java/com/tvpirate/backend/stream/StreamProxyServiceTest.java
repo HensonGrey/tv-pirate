@@ -122,6 +122,43 @@ class StreamProxyServiceTest {
         assertThat(service.stream(tampered, null).getStatusCode().value()).isEqualTo(404);
     }
 
+    @Test
+    void alternateAudioSubtitleAndIFramePlaylistsAreProxiedToo() throws Exception {
+        String root = service.register(PLAYLIST_URL, REFERER, OWNER);
+        String master = String.join("\n",
+                "#EXTM3U",
+                "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"aud\",NAME=\"English\",URI=\"audio/en.m3u8\"",
+                "#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"subs\",NAME=\"English\",URI=\"subs/en.m3u8\"",
+                "#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=90000,URI=\"iframes.m3u8\"",
+                "#EXT-X-STREAM-INF:BANDWIDTH=1,AUDIO=\"aud\",SUBTITLES=\"subs\"",
+                "video/720.m3u8");
+
+        String rewritten = rewrite(master, root);
+
+        assertThat(rewritten).doesNotContain("en.m3u8").doesNotContain("iframes.m3u8");
+        assertThat(tickets(rewritten)).hasSize(4).allMatch(TicketSealer::isSealed);
+        // Attributes other than URI survive the rewrite.
+        assertThat(rewritten).contains("GROUP-ID=\"aud\",NAME=\"English\"");
+    }
+
+    @Test
+    void aNonHttpKeyUriIsLeftAloneInsteadOfFailingThePlaylist() throws Exception {
+        String root = service.register(PLAYLIST_URL, REFERER, OWNER);
+
+        String rewritten = rewrite("#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"skd://drm-key-id\"\nseg-1.ts", root);
+
+        assertThat(rewritten).contains("URI=\"skd://drm-key-id\"");
+        assertThat(tickets(rewritten)).hasSize(1);
+    }
+
+    @Test
+    void aPlaylistWithoutAUsableContentTypeIsServedAsHls() {
+        assertThat(StreamProxyService.playlistMediaType(null).toString()).isEqualTo("application/vnd.apple.mpegurl");
+        assertThat(StreamProxyService.playlistMediaType("not a media type").toString())
+                .isEqualTo("application/vnd.apple.mpegurl");
+        assertThat(StreamProxyService.playlistMediaType("text/plain").toString()).isEqualTo("text/plain");
+    }
+
     // --- helpers ---
 
     private String rewrite(String playlist, String root) throws Exception {

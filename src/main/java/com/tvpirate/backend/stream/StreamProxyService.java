@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.ClientHttpRequest;
@@ -48,15 +49,16 @@ public class StreamProxyService {
     private static final String BROWSER_UA =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 
-    /** Encrypted-HLS key URIs and fMP4 init-map URIs; our providers serve
-     * plain playlists, but the rewrite is cheap insurance — and videasy's
-     * fMP4 playlists DO carry EXT-X-MAP lines. */
-    private static final Pattern KEY_URI_PATTERN = Pattern.compile("URI=\"([^\"]+)\"");
+    /** A tag's URI attribute: keys, init maps (videasy's fMP4 playlists carry
+     * EXT-X-MAP), alternate audio/subtitle renditions, I-frame playlists. */
+    private static final Pattern TAG_URI_PATTERN = Pattern.compile("URI=\"([^\"]+)\"");
 
     /** A redirect hop is a fresh request to a (possibly different) host — cap
      * it so a malicious or misconfigured upstream can't loop us forever. */
     private static final int MAX_REDIRECTS = 5;
     private static final Set<Integer> REDIRECT_STATUSES = Set.of(301, 302, 303, 307, 308);
+    /** The registered HLS playlist type (RFC 8216 §4); Spring has no constant for it. */
+    private static final MediaType HLS_PLAYLIST = MediaType.parseMediaType("application/vnd.apple.mpegurl");
 
     /** Root tickets only (1–6 per resolve); playlist children are sealed, never stored. */
     private final Cache<String, ProxyTarget> targets;
@@ -159,7 +161,7 @@ public class StreamProxyService {
                 if (isPlaylist) {
                     byte[] rewritten = rewritePlaylist(upstream.getBody().readAllBytes(), target);
                     return ResponseEntity.status(upstream.getStatusCode())
-                            .contentType(MediaType.parseMediaType(contentType))
+                            .contentType(playlistMediaType(contentType))
                             .body(new InputStreamResource(new ByteArrayInputStream(rewritten)));
                 }
 
@@ -216,7 +218,24 @@ public class StreamProxyService {
         }
     }
 
-    /** Rewrites every URI line (EXT-X-KEY, EXT-X-MAP) to a sealed ticket,
+    /** A playlist recognised by its .m3u8 path can arrive with no Content-Type, or a
+     * malformed one — parsing that used to 500 the whole playlist. */
+    static MediaType playlistMediaType(String contentType) {
+        if (contentType == null) {
+            return HLS_PLAYLIST;
+        }
+        try {
+            return MediaType.parseMediaType(contentType);
+        } catch (InvalidMediaTypeException e) {
+            return HLS_PLAYLIST;
+        }
+    }
+
+    private static boolean isHttp(URI uri) {
+        return "http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme());
+    }
+
+    /** Rewrites every URI (plain lines and any tag's URI="…") to a sealed ticket,
      * resolving relative ones against the playlist's own URL. The child
      * traces back to the parent's root and so gets its headers — the referer
      * requirement applies to init maps and segments exactly like it applies
@@ -227,16 +246,16 @@ public class StreamProxyService {
         for (String line : new String(body, StandardCharsets.UTF_8).split("\\r?\\n", -1)) {
             if (line.isEmpty()) {
                 rewritten.add(line);
-            } else if (line.startsWith("#EXT-X-KEY") || line.startsWith("#EXT-X-MAP")) {
-                Matcher matcher = KEY_URI_PATTERN.matcher(line);
-                if (matcher.find()) {
-                    String child = sealChild(parent.resolve(matcher.group(1)).toString(), target);
+            } else if (line.startsWith("#")) {
+                // Any tag's URI="…" — keys, init maps, alternate audio/subtitle and I-frame playlists.
+                Matcher matcher = TAG_URI_PATTERN.matcher(line);
+                URI uri = matcher.find() ? parent.resolve(matcher.group(1)) : null;
+                if (uri != null && isHttp(uri)) {
+                    String child = sealChild(uri.toString(), target);
                     rewritten.add(matcher.replaceFirst("URI=\"" + Matcher.quoteReplacement("/api/stream/proxy/" + child) + "\""));
                 } else {
-                    rewritten.add(line);
+                    rewritten.add(line); // no URI, or a non-fetchable one like skd:// (DRM key ids)
                 }
-            } else if (line.startsWith("#")) {
-                rewritten.add(line);
             } else {
                 // Plain URI line — resolve relative to the playlist, then proxy it.
                 String child = sealChild(parent.resolve(line.trim()).toString(), target);
