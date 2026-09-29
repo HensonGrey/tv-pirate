@@ -30,8 +30,8 @@ The JWT filter reads the `access_token` cookie first and falls back to the `Auth
 # 1. copy .env.example to .env and fill in DB_PASSWORD / JWT_SECRET
 cp .env.example .env
 
-# 2. run (must be executed FROM backend/ — the .env import is relative)
-.\mvnw.cmd spring-boot:run
+# 2. run (start.cmd finds JAVA_HOME and runs from backend/, where the .env import expects it)
+.\start
 ```
 
 Requires a local PostgreSQL database named `tv-pirate`. Schema is managed by **Liquibase migrations** (every change has an up + `--rollback` down, see `src/main/resources/db/changelog/` — that folder's `agents.md` has the workflow); Hibernate runs in `validate` mode and never alters the DB.
