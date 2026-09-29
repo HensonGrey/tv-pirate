@@ -115,8 +115,10 @@ class StreamProxyServiceTest {
     void aTamperedChildIsA404() throws Exception {
         String root = service.register(PLAYLIST_URL, REFERER, OWNER);
         String child = tickets(rewrite("#EXTM3U\nseg-1.ts", root)).getFirst();
-        char last = child.charAt(child.length() - 1);
-        String tampered = child.substring(0, child.length() - 1) + (last == 'A' ? 'B' : 'A');
+        // Flip a real byte: swapping the last base64 char can hit only padding bits, which the decoder ignores.
+        byte[] raw = java.util.Base64.getUrlDecoder().decode(child.substring(2));
+        raw[raw.length / 2] ^= 1;
+        String tampered = "s." + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
 
         assertThat(service.ownerOf(tampered)).isNull();
         assertThat(service.stream(tampered, null).getStatusCode().value()).isEqualTo(404);
