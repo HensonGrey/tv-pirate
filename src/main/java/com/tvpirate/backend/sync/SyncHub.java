@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -17,9 +18,12 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @Component
 public class SyncHub {
 
+    // Each browser tab sends its own id on writes, so it can ignore its own note.
+    public static final String CLIENT_ID_HEADER = "X-Client-Id";
     static final int MAX_LINES_PER_USER = 5;
     // Under the access token's 15 minutes, so a line can't outlive its login.
     static final Duration LINE_LIFETIME = Duration.ofMinutes(10);
+    private static final long HEARTBEAT_MS = 20_000;
     // An SSE event with empty data is never delivered.
     private static final String NO_ORIGIN = "-";
 
@@ -49,6 +53,14 @@ public class SyncHub {
         }
     }
 
+    /** A quiet line gets cut by proxies, so every line is pinged. A failed write also drops dead lines. */
+    @Scheduled(fixedRate = HEARTBEAT_MS)
+    void heartbeat() {
+        for (UserLine entry : allLines()) {
+            send(entry.userId(), entry.line(), SseEmitter.event().comment("hb"));
+        }
+    }
+
     /** Returns the user's oldest line if this one went over the cap. */
     private synchronized SseEmitter add(long userId, SseEmitter line) {
         List<SseEmitter> open = lines.computeIfAbsent(userId, id -> new ArrayList<>());
@@ -59,6 +71,12 @@ public class SyncHub {
     // A copy, so publish can write to the lines outside the lock.
     private synchronized List<SseEmitter> linesOf(long userId) {
         return List.copyOf(lines.getOrDefault(userId, List.of()));
+    }
+
+    private synchronized List<UserLine> allLines() {
+        List<UserLine> all = new ArrayList<>();
+        lines.forEach((userId, open) -> open.forEach(line -> all.add(new UserLine(userId, line))));
+        return all;
     }
 
     private synchronized void remove(long userId, SseEmitter line) {
@@ -75,5 +93,8 @@ public class SyncHub {
         } catch (IOException | IllegalStateException e) {
             remove(userId, line);
         }
+    }
+
+    private record UserLine(long userId, SseEmitter line) {
     }
 }
