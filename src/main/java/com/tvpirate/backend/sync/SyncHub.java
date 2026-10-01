@@ -11,31 +11,24 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
- * The open lines from the server to each signed-in user's pages, and the notes sent
- * down them. A line is one SSE connection (one {@link SseEmitter}): a user with the
- * site open on a phone and a laptop has two. A note only says what changed
- * ("favourites"), never the data — the page asks for that itself.
- * One lock guards the map; a line is only written to outside it, so one slow
- * client can't hold up the rest.
+ * Each signed-in user's open SSE connections ("lines") and the notes sent down them.
+ * A note says only what changed ("favourites"), never the data.
  */
 @Component
 public class SyncHub {
 
-    /** Most lines one user may have open; opening another closes their oldest. */
     static final int MAX_LINES_PER_USER = 5;
-    /** A line closes after this and the page reconnects. Kept under the access token's
-     * life (jwt.access-minutes, 15), so a line can't outlive the login it was opened with. */
+    // Under the access token's 15 minutes, so a line can't outlive its login.
     static final Duration LINE_LIFETIME = Duration.ofMinutes(10);
-    /** An SSE event with empty data is never delivered, so every note carries something. */
+    // An SSE event with empty data is never delivered.
     private static final String NO_ORIGIN = "-";
 
-    /** Open lines per user id, oldest first; a user is removed when their last line closes. */
+    // Oldest first.
     private final Map<Long, List<SseEmitter>> lines = new HashMap<>();
 
-    /** Opens a line for the user. Spring sends the returned emitter as the response. */
     public SseEmitter subscribe(long userId) {
         SseEmitter line = new SseEmitter(LINE_LIFETIME.toMillis());
-        // However a line ends (finished, timed out, client gone), it leaves the map.
+        // Every way a line can end removes it.
         line.onCompletion(() -> remove(userId, line));
         line.onTimeout(() -> remove(userId, line));
         line.onError(error -> remove(userId, line));
@@ -48,8 +41,7 @@ public class SyncHub {
         return line;
     }
 
-    /** Tells every line the user has open that `kind` changed. `origin` is the id of the
-     * tab that made the change, so that tab can ignore its own echo; null if unknown. */
+    /** `origin` is the tab that made the change, so it can skip its own echo. */
     public void publish(long userId, String kind, String origin) {
         String data = origin == null || origin.isBlank() ? NO_ORIGIN : origin;
         for (SseEmitter line : linesOf(userId)) {
@@ -57,13 +49,14 @@ public class SyncHub {
         }
     }
 
-    /** Adds the line; returns the user's oldest line if that went over the cap, else null. */
+    /** Returns the user's oldest line if this one went over the cap. */
     private synchronized SseEmitter add(long userId, SseEmitter line) {
         List<SseEmitter> open = lines.computeIfAbsent(userId, id -> new ArrayList<>());
         open.add(line);
         return open.size() > MAX_LINES_PER_USER ? open.remove(0) : null;
     }
 
+    // A copy, so publish can write to the lines outside the lock.
     private synchronized List<SseEmitter> linesOf(long userId) {
         return List.copyOf(lines.getOrDefault(userId, List.of()));
     }
@@ -71,11 +64,11 @@ public class SyncHub {
     private synchronized void remove(long userId, SseEmitter line) {
         List<SseEmitter> open = lines.get(userId);
         if (open != null && open.remove(line) && open.isEmpty()) {
-            lines.remove(userId); // idle users don't pile up
+            lines.remove(userId);
         }
     }
 
-    /** A line that can't be written to is dead (client gone, or already completed): drop it. */
+    /** A line that can't be written to is dead: drop it. */
     private void send(long userId, SseEmitter line, SseEmitter.SseEventBuilder note) {
         try {
             line.send(note);
