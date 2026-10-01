@@ -12,7 +12,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
  * Each signed-in user's open SSE connections ("lines") and the notes sent down them.
- * A note says only what changed ("favourites"), never the data.
+ * A note says only what changed (a {@link SyncKindEnum}), never the data.
  */
 @Component
 public class SyncHub {
@@ -42,10 +42,10 @@ public class SyncHub {
     }
 
     /** `origin` is the tab that made the change, so it can skip its own echo. */
-    public void publish(long userId, String kind, String origin) {
+    public void publish(long userId, SyncKindEnum kind, String origin) {
         String data = origin == null || origin.isBlank() ? NO_ORIGIN : origin;
         for (SseEmitter line : linesOf(userId)) {
-            send(userId, line, SseEmitter.event().name(kind).data(data));
+            send(userId, line, SseEmitter.event().name(kind.eventName()).data(data));
         }
     }
 
