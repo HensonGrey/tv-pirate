@@ -60,9 +60,9 @@ public class SecurityConfig {
                         // application.properties, but this is the backstop).
                         .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll() // CORS preflight
-                        // ERROR dispatches pass this chain too, and the JWT filter skips
+                        // ERROR dispatches, and the async one that ends an SSE line, pass this chain too, and the JWT filter skips
                         // them — without this, errors mask as 401. vault:auth-deep-dive#error-dispatch
-                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                        .dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.ASYNC).permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, authException) ->
                         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED)))
