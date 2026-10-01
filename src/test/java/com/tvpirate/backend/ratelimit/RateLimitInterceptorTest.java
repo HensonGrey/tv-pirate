@@ -28,6 +28,9 @@ import com.tvpirate.backend.security.AuthedUser;
  * what a caller over the limit actually receives. */
 class RateLimitInterceptorTest {
 
+    private static final int DEFAULT_BURST = burst(RateLimitPolicy.DEFAULT);
+    private static final int SEARCH_BURST = burst(RateLimitPolicy.TMDB_SEARCH);
+
     private MockMvc mockMvc;
     private RateLimitInterceptor interceptor;
 
@@ -48,7 +51,7 @@ class RateLimitInterceptorTest {
 
     @Test
     void overTheLimitIsA429ProblemWithRetryAfter() throws Exception {
-        for (int i = 0; i < 30; i++) {
+        for (int i = 0; i < DEFAULT_BURST; i++) {
             assertThat(status(get("/api/plain"))).isEqualTo(200);
         }
 
@@ -56,14 +59,14 @@ class RateLimitInterceptorTest {
 
         assertThat(result.getResponse().getStatus()).isEqualTo(429);
         assertThat(result.getResponse().getContentType()).contains("application/problem+json");
-        assertThat(result.getResponse().getHeader("Retry-After")).isEqualTo("2");
+        assertThat(result.getResponse().getHeader("Retry-After")).isEqualTo("1");
         assertThat(JsonPath.<String>read(result.getResponse().getContentAsString(), "$.detail"))
-                .isEqualTo("Too many requests — try again in 2 seconds.");
+                .isEqualTo("Too many requests — try again in 1 second.");
     }
 
     @Test
     void theMethodAnnotationBeatsTheClassOne() throws Exception {
-        for (int i = 0; i < 30; i++) {
+        for (int i = 0; i < SEARCH_BURST; i++) {
             assertThat(status(get("/api/tmdb-like/search"))).isEqualTo(200);
         }
         assertThat(status(get("/api/tmdb-like/search"))).isEqualTo(429);
@@ -84,7 +87,7 @@ class RateLimitInterceptorTest {
 
     @Test
     void usersHaveTheirOwnBuckets() throws Exception {
-        for (int i = 0; i < 30; i++) {
+        for (int i = 0; i < DEFAULT_BURST; i++) {
             status(get("/api/plain"));
         }
         assertThat(status(get("/api/plain"))).isEqualTo(429);
@@ -96,7 +99,7 @@ class RateLimitInterceptorTest {
     @Test
     void anAccountIsNotHeldToTheGuestLimit() throws Exception {
         signIn(3L, "GOOGLE");
-        for (int i = 0; i < 31; i++) {
+        for (int i = 0; i <= DEFAULT_BURST; i++) {
             assertThat(status(get("/api/plain"))).isEqualTo(200);
         }
     }
@@ -141,6 +144,10 @@ class RateLimitInterceptorTest {
 
     private int status(org.springframework.test.web.servlet.RequestBuilder request) throws Exception {
         return mockMvc.perform(request).andReturn().getResponse().getStatus();
+    }
+
+    private static int burst(RateLimitPolicy policy) {
+        return (int) policy.limits(RateLimitPolicy.Tier.GUEST).get(0).capacity();
     }
 
     private static MockHttpServletRequest request() {

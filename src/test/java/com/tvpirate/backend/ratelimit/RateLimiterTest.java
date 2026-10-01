@@ -47,14 +47,14 @@ class RateLimiterTest {
 
     @Test
     void theBurstPassesThenTheNextCallWaitsForARefill() {
-        assertThat(consume(DEFAULT, Tier.GUEST, "u1", 30)).allMatch(Decision::allowed);
+        assertThat(consume(DEFAULT, Tier.GUEST, "u1", burst(DEFAULT, Tier.GUEST)))
+                .allMatch(Decision::allowed);
 
         Decision rejected = limiter.tryConsume(DEFAULT, Tier.GUEST, "u1");
         assertThat(rejected.allowed()).isFalse();
-        // 30/min refills one token every 2 s.
-        assertThat(rejected.retryAfter()).isEqualTo(Duration.ofSeconds(2));
+        assertThat(rejected.retryAfter()).isEqualTo(timePerToken(DEFAULT, Tier.GUEST));
 
-        clock.advance(Duration.ofSeconds(2));
+        clock.advance(timePerToken(DEFAULT, Tier.GUEST));
         assertThat(limiter.tryConsume(DEFAULT, Tier.GUEST, "u1").allowed()).isTrue();
     }
 
@@ -119,12 +119,15 @@ class RateLimiterTest {
 
     @Test
     void anAccountGetsThreeTimesAGuestsBurstAndRefill() {
-        assertThat(consume(DEFAULT, Tier.ACCOUNT, "u1", 90)).allMatch(Decision::allowed);
+        assertThat(burst(DEFAULT, Tier.ACCOUNT)).isEqualTo(3 * burst(DEFAULT, Tier.GUEST));
+        assertThat(consume(DEFAULT, Tier.ACCOUNT, "u1", burst(DEFAULT, Tier.ACCOUNT)))
+                .allMatch(Decision::allowed);
 
         Decision rejected = limiter.tryConsume(DEFAULT, Tier.ACCOUNT, "u1");
         assertThat(rejected.allowed()).isFalse();
-        // 90/min is a token every 2/3 s, three times a guest's rate.
-        assertThat(rejected.retryAfter()).isLessThan(Duration.ofSeconds(1));
+        // Three times the refill rate: a token arrives in a third of a guest's wait.
+        assertThat(rejected.retryAfter())
+                .isEqualTo(timePerToken(DEFAULT, Tier.GUEST).dividedBy(3));
     }
 
     @Test
@@ -136,7 +139,7 @@ class RateLimiterTest {
 
     @Test
     void keysTiersAndPoliciesDontShareBuckets() {
-        consume(DEFAULT, Tier.GUEST, "u1", 30);
+        consume(DEFAULT, Tier.GUEST, "u1", burst(DEFAULT, Tier.GUEST));
         assertThat(limiter.tryConsume(DEFAULT, Tier.GUEST, "u1").allowed()).isFalse();
 
         assertThat(limiter.tryConsume(DEFAULT, Tier.GUEST, "u2").allowed()).isTrue();
@@ -148,6 +151,15 @@ class RateLimiterTest {
         return java.util.stream.IntStream.range(0, times)
                 .mapToObj(i -> limiter.tryConsume(policy, tier, key))
                 .toList();
+    }
+
+    private static int burst(RateLimitPolicy policy, Tier tier) {
+        return (int) policy.limits(tier).get(0).capacity();
+    }
+
+    private static Duration timePerToken(RateLimitPolicy policy, Tier tier) {
+        RateLimitPolicy.Limit limit = policy.limits(tier).get(0);
+        return limit.period().dividedBy(limit.tokens());
     }
 
     private List<ILoggingEvent> warnings() {
