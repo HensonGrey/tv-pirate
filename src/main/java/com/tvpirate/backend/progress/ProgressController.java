@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,6 +19,8 @@ import org.springframework.web.server.ResponseStatusException;
 import com.tvpirate.backend.progress.dto.ProgressRowDto;
 import com.tvpirate.backend.progress.dto.SaveProgressRequest;
 import com.tvpirate.backend.security.AuthedUser;
+import com.tvpirate.backend.sync.SyncHub;
+import com.tvpirate.backend.sync.SyncKindEnum;
 
 /** Per-user watch history: the player heartbeats positions here and the home
  * screen reads them back for its progress bars. vault:watch-progress-deep-dive#schema */
@@ -27,8 +30,11 @@ public class ProgressController {
 
     private final ProgressService progressService;
 
-    public ProgressController(ProgressService progressService) {
+    private final SyncHub syncHub;
+
+    public ProgressController(ProgressService progressService, SyncHub syncHub) {
         this.progressService = progressService;
+        this.syncHub = syncHub;
     }
 
     /** All rows for the caller, newest first — the frontend picks its winner. */
@@ -40,10 +46,12 @@ public class ProgressController {
 
     @PutMapping
     public ResponseEntity<Void> save(@RequestBody SaveProgressRequest request,
+                                     @RequestHeader(name = SyncHub.CLIENT_ID_HEADER, required = false) String clientId,
                                      Authentication authentication) {
         validate(request);
         AuthedUser principal = (AuthedUser) authentication.getPrincipal();
         progressService.upsert(principal.id(), request);
+        syncHub.publish(principal.id(), SyncKindEnum.PROGRESS, clientId);
         return ResponseEntity.noContent().build();
     }
 
@@ -52,6 +60,7 @@ public class ProgressController {
                                        @PathVariable long tmdbId,
                                        @RequestParam(required = false) Integer season,
                                        @RequestParam(required = false) Integer episode,
+                                       @RequestHeader(name = SyncHub.CLIENT_ID_HEADER, required = false) String clientId,
                                        Authentication authentication) {
         if (!type.equals("movie") && !type.equals("tv")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "type must be movie or tv");
@@ -63,6 +72,7 @@ public class ProgressController {
         }
         AuthedUser principal = (AuthedUser) authentication.getPrincipal();
         progressService.delete(principal.id(), type, tmdbId, season, episode);
+        syncHub.publish(principal.id(), SyncKindEnum.PROGRESS, clientId);
         return ResponseEntity.noContent().build();
     }
 

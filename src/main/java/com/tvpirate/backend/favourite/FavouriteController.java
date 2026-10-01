@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -17,6 +18,8 @@ import org.springframework.web.server.ResponseStatusException;
 import com.tvpirate.backend.favourite.dto.AddFavouriteRequest;
 import com.tvpirate.backend.favourite.dto.FavouriteRowDto;
 import com.tvpirate.backend.security.AuthedUser;
+import com.tvpirate.backend.sync.SyncHub;
+import com.tvpirate.backend.sync.SyncKindEnum;
 
 /** The favourites API behind the heart buttons. GET seeds every page with
  * one shared list; PUT/DELETE are idempotent for optimistic retries.
@@ -27,8 +30,11 @@ public class FavouriteController {
 
     private final FavouriteService favouriteService;
 
-    public FavouriteController(FavouriteService favouriteService) {
+    private final SyncHub syncHub;
+
+    public FavouriteController(FavouriteService favouriteService, SyncHub syncHub) {
         this.favouriteService = favouriteService;
+        this.syncHub = syncHub;
     }
 
     @GetMapping
@@ -39,24 +45,28 @@ public class FavouriteController {
 
     @PutMapping
     public ResponseEntity<Void> add(@RequestBody AddFavouriteRequest request,
+                                    @RequestHeader(name = SyncHub.CLIENT_ID_HEADER, required = false) String clientId,
                                     Authentication authentication) {
         if (!"movie".equals(request.mediaType()) && !"tv".equals(request.mediaType())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "mediaType must be movie or tv");
         }
         AuthedUser principal = (AuthedUser) authentication.getPrincipal();
         favouriteService.add(principal.id(), request.tmdbId(), request.mediaType());
+        syncHub.publish(principal.id(), SyncKindEnum.FAVOURITES, clientId);
         return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/{type}/{tmdbId}")
     public ResponseEntity<Void> remove(@PathVariable String type,
                                        @PathVariable long tmdbId,
+                                       @RequestHeader(name = SyncHub.CLIENT_ID_HEADER, required = false) String clientId,
                                        Authentication authentication) {
         if (!type.equals("movie") && !type.equals("tv")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "type must be movie or tv");
         }
         AuthedUser principal = (AuthedUser) authentication.getPrincipal();
         favouriteService.remove(principal.id(), tmdbId, type);
+        syncHub.publish(principal.id(), SyncKindEnum.FAVOURITES, clientId);
         return ResponseEntity.noContent().build();
     }
 }
