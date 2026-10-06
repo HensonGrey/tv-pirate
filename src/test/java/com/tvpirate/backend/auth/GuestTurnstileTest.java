@@ -62,24 +62,45 @@ class GuestTurnstileTest {
     }
 
     @Test
-    void aTokenCloudflareRejectsIsRefused() throws Exception {
-        cloudflare.expect(requestTo(SITEVERIFY_URL))
-                .andRespond(withSuccess("{\"success\":false,\"error-codes\":[\"invalid-input-response\"]}",
-                        MediaType.APPLICATION_JSON));
+    void aTokenCloudflareRejectsIsRefusedAsABadToken() throws Exception {
+        cloudflareRefusesWith("invalid-input-response");
 
-        assertRefused(mockMvc.perform(guest("bad-token")).andReturn().getResponse());
+        assertRefused(mockMvc.perform(guest("bad-token")).andReturn().getResponse(), TurnstileFailureEnum.BAD_TOKEN);
+    }
+
+    @Test
+    void aWrongSecretIsReportedAsMisconfigured() throws Exception {
+        cloudflareRefusesWith("invalid-input-secret");
+
+        assertRefused(mockMvc.perform(guest("good-token")).andReturn().getResponse(), TurnstileFailureEnum.BAD_SECRET);
+    }
+
+    @Test
+    void aReusedTokenIsReportedAsExpired() throws Exception {
+        cloudflareRefusesWith("timeout-or-duplicate");
+
+        assertRefused(mockMvc.perform(guest("used-token")).andReturn().getResponse(), TurnstileFailureEnum.EXPIRED);
+    }
+
+    @Test
+    void anUnknownErrorCodeIsACloudflareError() throws Exception {
+        cloudflareRefusesWith("internal-error");
+
+        assertRefused(mockMvc.perform(guest("good-token")).andReturn().getResponse(),
+                TurnstileFailureEnum.CLOUDFLARE_ERROR);
     }
 
     @Test
     void noTokenIsRefusedWithoutAskingCloudflare() throws Exception {
-        assertRefused(mockMvc.perform(post("/api/auth/guest").with(fromIp())).andReturn().getResponse());
+        assertRefused(mockMvc.perform(post("/api/auth/guest").with(fromIp())).andReturn().getResponse(),
+                TurnstileFailureEnum.NO_TOKEN);
     }
 
     @Test
     void cloudflareBeingDownFailsClosed() throws Exception {
         cloudflare.expect(requestTo(SITEVERIFY_URL)).andRespond(withServerError());
 
-        assertRefused(mockMvc.perform(guest("good-token")).andReturn().getResponse());
+        assertRefused(mockMvc.perform(guest("good-token")).andReturn().getResponse(), TurnstileFailureEnum.UNREACHABLE);
     }
 
     @Test
@@ -92,9 +113,16 @@ class GuestTurnstileTest {
         assertThat(authService.guestsCreated).isEqualTo(1);
     }
 
-    private void assertRefused(MockHttpServletResponse response) {
+    private void cloudflareRefusesWith(String errorCode) {
+        cloudflare.expect(requestTo(SITEVERIFY_URL))
+                .andRespond(withSuccess("{\"success\":false,\"error-codes\":[\"" + errorCode + "\"]}",
+                        MediaType.APPLICATION_JSON));
+    }
+
+    private void assertRefused(MockHttpServletResponse response, TurnstileFailureEnum failure) {
         cloudflare.verify();
         assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getErrorMessage()).isEqualTo(failure.message());
         assertThat(authService.guestsCreated).isZero();
         assertThat(response.getHeaders(HttpHeaders.SET_COOKIE)).isEmpty();
     }

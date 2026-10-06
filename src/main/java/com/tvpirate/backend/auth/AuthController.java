@@ -85,8 +85,10 @@ public class AuthController {
             return new UserDto(existing.id(), existing.username(), existing.provider(), existing.profilePictureUrl());
         }
         String token = body == null ? null : body.turnstileToken();
-        if (turnstileClient.isConfigured() && !turnstileClient.verify(token, request.getRemoteAddr())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "The bot check didn't pass. Please try again.");
+        if (turnstileClient.isConfigured()) {
+            turnstileClient.findFailure(token, request.getRemoteAddr()).ifPresent(failure -> {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, failure.message());
+            });
         }
         AuthResponse auth = authService.loginAsGuest();
         setAuthCookies(response, auth);

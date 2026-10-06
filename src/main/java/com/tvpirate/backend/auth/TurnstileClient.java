@@ -1,6 +1,8 @@
 package com.tvpirate.backend.auth;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +15,8 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 /** Cloudflare Turnstile's server-side check of the token its widget hands the browser.
  * It stops scripted guest creation whatever IP the script rotates through. vault:rate-limiting-deep-dive#vpn */
@@ -51,29 +55,38 @@ public class TurnstileClient {
         return !secretKey.isBlank();
     }
 
-    /** Fails closed: a token Cloudflare can't vouch for, even because it's unreachable, is a no. */
-    public boolean verify(String token, String remoteIp) {
+    /** Empty when the token passes. Fails closed: a token Cloudflare can't vouch for, even because it's unreachable, is a no. */
+    public Optional<TurnstileFailureEnum> findFailure(String token, String remoteIp) {
         if (token == null || token.isBlank()) {
-            return false;
+            return Optional.of(TurnstileFailureEnum.NO_TOKEN);
         }
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("secret", secretKey);
         form.add("response", token);
         form.add("remoteip", remoteIp);
+        SiteverifyResponse result;
         try {
-            SiteverifyResponse result = client.post()
+            result = client.post()
                     .uri(SITEVERIFY_URL)
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .body(form)
                     .retrieve()
                     .body(SiteverifyResponse.class);
-            return result != null && result.success();
         } catch (RestClientException e) {
             log.warn("Turnstile siteverify failed: {}", e.getMessage());
-            return false;
+            return Optional.of(TurnstileFailureEnum.UNREACHABLE);
         }
+        if (result == null) {
+            return Optional.of(TurnstileFailureEnum.CLOUDFLARE_ERROR);
+        }
+        if (result.success()) {
+            return Optional.empty();
+        }
+        List<String> codes = result.errorCodes() == null ? List.of() : result.errorCodes();
+        log.warn("Turnstile refused a token: {}", codes);
+        return Optional.of(TurnstileFailureEnum.fromErrorCodes(codes));
     }
 
-    record SiteverifyResponse(boolean success) {
+    record SiteverifyResponse(boolean success, @JsonProperty("error-codes") List<String> errorCodes) {
     }
 }
