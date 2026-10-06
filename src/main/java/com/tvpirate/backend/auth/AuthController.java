@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -27,11 +28,13 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.tvpirate.backend.auth.dto.AuthResponse;
 import com.tvpirate.backend.auth.dto.GoogleProfile;
+import com.tvpirate.backend.auth.dto.GuestRequest;
 import com.tvpirate.backend.auth.dto.UserDto;
 import com.tvpirate.backend.ratelimit.RateLimitPolicy;
 import com.tvpirate.backend.ratelimit.RateLimited;
 import com.tvpirate.backend.security.AuthedUser;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 /** Public auth endpoints (whitelisted in SecurityConfig); future provider
@@ -54,16 +57,19 @@ public class AuthController {
 
     private final AuthService authService;
     private final GoogleOAuthClient googleOAuthClient;
+    private final TurnstileClient turnstileClient;
     private final boolean cookieSecure;
     private final String frontendUrl;
     private final SecureRandom random = new SecureRandom();
 
     public AuthController(AuthService authService,
                           GoogleOAuthClient googleOAuthClient,
+                          TurnstileClient turnstileClient,
                           @Value("${app.cookie.secure:false}") boolean cookieSecure,
                           @Value("${app.frontend-url:http://localhost:5173}") String frontendUrl) {
         this.authService = authService;
         this.googleOAuthClient = googleOAuthClient;
+        this.turnstileClient = turnstileClient;
         this.cookieSecure = cookieSecure;
         this.frontendUrl = frontendUrl;
     }
@@ -71,11 +77,16 @@ public class AuthController {
     // A DB row + token pair with no credentials, so the strictest limit. vault:rate-limiting-deep-dive#policies
     @PostMapping("/guest")
     @RateLimited(RateLimitPolicy.GUEST_CREATE)
-    public UserDto guest(Authentication authentication, HttpServletResponse response) {
+    public UserDto guest(@RequestBody(required = false) GuestRequest body, Authentication authentication,
+                         HttpServletRequest request, HttpServletResponse response) {
         // Already signed in: hand back the current session instead of piling
         // up a fresh user + refresh-token row on every double-click or retry.
         if (authentication != null && authentication.getPrincipal() instanceof AuthedUser existing) {
             return new UserDto(existing.id(), existing.username(), existing.provider(), existing.profilePictureUrl());
+        }
+        String token = body == null ? null : body.turnstileToken();
+        if (turnstileClient.isConfigured() && !turnstileClient.verify(token, request.getRemoteAddr())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "The bot check didn't pass. Please try again.");
         }
         AuthResponse auth = authService.loginAsGuest();
         setAuthCookies(response, auth);

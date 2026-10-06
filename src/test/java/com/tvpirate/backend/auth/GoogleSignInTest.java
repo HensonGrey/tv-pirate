@@ -139,7 +139,8 @@ class GoogleSignInTest {
     }
 
     private MockMvc mvcFor(GoogleOAuthClient client) {
-        return MockMvcBuilders.standaloneSetup(new AuthController(authService, client, false, FRONTEND)).build();
+        return MockMvcBuilders.standaloneSetup(new AuthController(authService, client,
+                new TurnstileClient(RestClient.create(), ""), false, FRONTEND)).build();
     }
 
     private static MockHttpServletRequestBuilder callback(String code, String state, String cookieState) {
