@@ -18,9 +18,9 @@ public enum RateLimitPolicy {
             Limit.greedy(60, 60, ofHours(1)), 0, 0),
     AUTH_SESSION(Scope.NETWORK, List.of(Limit.greedy(10, 10, ofMinutes(1))), null, 0, 0),
     STREAM_RESOLVE(Scope.USER, List.of(Limit.greedy(10, 1, ofSeconds(6))),
-            Limit.greedy(60, 60, ofMinutes(1)), 4, 8),
+            Limit.greedy(60, 60, ofMinutes(1)), 4, 16),
     SUBTITLES(Scope.USER, List.of(Limit.greedy(10, 10, ofMinutes(1))),
-            Limit.greedy(60, 60, ofMinutes(1)), 4, 8),
+            Limit.greedy(60, 60, ofMinutes(1)), 4, 16),
     // The three below are generous on purpose: TMDB allows far more than a person can send
     // and our caches answer repeats, so a limit here only ever taxes real users.
     // A search is two requests (movies + tv), one TMDB call each.
@@ -32,9 +32,10 @@ public enum RateLimitPolicy {
 
     public static final int ACCOUNT_MULTIPLIER = 3;
 
-    /** The playback proxy's in-flight caps (it's never rate limited); raise with server.tomcat.threads.max. */
+    /** The playback proxy's in-flight caps (it's never rate limited); the totals here and above
+     * use 48 + 16 + 16 of Tomcat's 100 threads, so raise them with server.tomcat.threads.max. */
     public static final int PROXY_IN_FLIGHT_PER_OWNER = 8;
-    public static final int PROXY_IN_FLIGHT_TOTAL = 24;
+    public static final int PROXY_IN_FLIGHT_TOTAL = 48;
 
     public enum Scope { USER, NETWORK }
 

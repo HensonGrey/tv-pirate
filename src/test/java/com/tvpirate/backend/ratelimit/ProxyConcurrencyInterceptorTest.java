@@ -14,8 +14,11 @@ import org.springframework.web.servlet.HandlerMapping;
 import com.tvpirate.backend.stream.PublicTargetGuard;
 import com.tvpirate.backend.stream.StreamProxyService;
 
-/** The stream lane's caps: 8 in flight per ticket owner, 24 in total. */
+/** The stream lane's caps: PROXY_IN_FLIGHT_PER_OWNER per ticket owner, PROXY_IN_FLIGHT_TOTAL in total. */
 class ProxyConcurrencyInterceptorTest {
+
+    private static final int PER_OWNER = RateLimitPolicy.PROXY_IN_FLIGHT_PER_OWNER;
+    private static final int TOTAL = RateLimitPolicy.PROXY_IN_FLIGHT_TOTAL;
 
     private static final String UNKNOWN_TICKET = "0123456789abcdef0123456789abcdef";
 
@@ -23,37 +26,38 @@ class ProxyConcurrencyInterceptorTest {
     private final ProxyConcurrencyInterceptor interceptor = new ProxyConcurrencyInterceptor(proxyService);
 
     @Test
-    void anOwnerGetsEightAtOnceThenABare503() {
+    void anOwnerGetsItsCapAtOnceThenABare503() {
         String ticket = ticketOwnedBy(1L);
-        assertThat(admit(ticket, 8)).allMatch(Attempt::allowed);
+        assertThat(admit(ticket, PER_OWNER)).allMatch(Attempt::allowed);
 
-        Attempt ninth = admit(ticket);
-        assertThat(ninth.allowed()).isFalse();
-        assertThat(ninth.response().getStatus()).isEqualTo(503);
-        assertThat(ninth.response().getHeader("Retry-After")).isEqualTo("2");
-        assertThat(ninth.response().getContentAsByteArray()).isEmpty();
+        Attempt over = admit(ticket);
+        assertThat(over.allowed()).isFalse();
+        assertThat(over.response().getStatus()).isEqualTo(503);
+        assertThat(over.response().getHeader("Retry-After")).isEqualTo("2");
+        assertThat(over.response().getContentAsByteArray()).isEmpty();
     }
 
     @Test
     void anotherOwnerIsNotBlockedByTheFirst() {
-        admit(ticketOwnedBy(1L), 8);
+        admit(ticketOwnedBy(1L), PER_OWNER);
 
         assertThat(admit(ticketOwnedBy(2L)).allowed()).isTrue();
     }
 
     @Test
-    void twentyFourInTotalAcrossOwners() {
-        for (long owner = 1; owner <= 3; owner++) {
-            assertThat(admit(ticketOwnedBy(owner), 8)).allMatch(Attempt::allowed);
+    void theTotalCapHoldsAcrossOwners() {
+        long owners = TOTAL / PER_OWNER;
+        for (long owner = 1; owner <= owners; owner++) {
+            assertThat(admit(ticketOwnedBy(owner), PER_OWNER)).allMatch(Attempt::allowed);
         }
 
-        assertThat(admit(ticketOwnedBy(4L)).allowed()).isFalse();
+        assertThat(admit(ticketOwnedBy(owners + 1)).allowed()).isFalse();
     }
 
     @Test
     void aSlotIsFreedWhenItsRequestCompletes() {
         String ticket = ticketOwnedBy(1L);
-        List<Attempt> running = admit(ticket, 8);
+        List<Attempt> running = admit(ticket, PER_OWNER);
         assertThat(admit(ticket).allowed()).isFalse();
 
         complete(running.getFirst(), null);
@@ -64,7 +68,7 @@ class ProxyConcurrencyInterceptorTest {
     @Test
     void aSlotIsFreedWhenItsRequestFails() {
         String ticket = ticketOwnedBy(1L);
-        List<Attempt> running = admit(ticket, 8);
+        List<Attempt> running = admit(ticket, PER_OWNER);
 
         complete(running.getFirst(), new IllegalStateException("CDN died mid-segment"));
 
@@ -73,7 +77,7 @@ class ProxyConcurrencyInterceptorTest {
 
     @Test
     void anUnknownTicketCountsTowardTheTotalOnly() {
-        assertThat(admit(UNKNOWN_TICKET, 24)).allMatch(Attempt::allowed);
+        assertThat(admit(UNKNOWN_TICKET, TOTAL)).allMatch(Attempt::allowed);
 
         assertThat(admit(UNKNOWN_TICKET).allowed()).isFalse();
         assertThat(admit(ticketOwnedBy(1L)).allowed()).isFalse();
