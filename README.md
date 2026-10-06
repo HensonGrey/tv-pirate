@@ -48,6 +48,7 @@ Requires a local PostgreSQL database named `tv-pirate`. Schema is managed by **L
 - [ ] **Caddy:** only 80/443 public; 8080 stays private. Raise the at-once caps in `RateLimitPolicy` together with `server.tomcat.threads.max`.
 - [ ] **Env switches:** `COOKIE_SECURE=true`, `CORS_ALLOWED_ORIGINS` and `FRONTEND_URL` set to the prod origin, `RATE_LIMIT_ENABLED=true`.
 - [ ] **Frontend build:** `VITE_API_BASE_URL` is read at build time, so build with the prod API URL.
+- [ ] **New Relic:** unzip the [Java agent](https://download.newrelic.com/newrelic/java-agent/newrelic-agent/current/newrelic-java.zip) to `/opt/newrelic`, start with `java -javaagent:/opt/newrelic/newrelic.jar -jar <app>.jar` (the flag goes before `-jar`), and pass `.env` to the process as real env vars, since the agent starts before Spring's `.env` import.
 
 ### Credentials per environment
 
@@ -61,6 +62,7 @@ Names only, never commit the values. Stream providers (Videasy, Vixsrc) need no 
 | OpenSubtitles | `OPENSUBTITLES_API_KEY` | no, no captions without it | the key from opensubtitles.com/consumers | the same key, mind the small daily quota; a separate consumer for prod keeps the quota apart |
 | Google sign-in | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | no, guests only without it | OAuth client with `http://localhost:8080/api/auth/google/callback` registered | a separate OAuth client; register `https://<api-domain>/api/auth/google/callback` exactly as `GOOGLE_REDIRECT_URI`, and publish the consent screen or add each user as a test user |
 | Cloudflare Turnstile | `TURNSTILE_SECRET_KEY` (FE: `VITE_TURNSTILE_SITE_KEY`) | yes in prod, guest creation skips the bot check without it | Cloudflare's always-pass test keys, or the real widget with `localhost` on its hostname list | the real widget's secret, with the prod FE domain on its hostname list |
+| New Relic | `NEW_RELIC_LICENSE_KEY`, `NEW_RELIC_APP_NAME` (querying only: `NEW_RELIC_ACCOUNT_ID`, `NEW_RELIC_USER_KEY`) | no, logs stay on the console without it | usually no agent; if you run one, a separate app name like `tv-pirate-backend-dev` | an `Ingest - License` key from one.eu.newrelic.com/api-keys, shown in full only once at creation; app name `tv-pirate-backend-prod` |
 
 **Scripts and e2e suites:** don't blank the Turnstile keys to get past the bot check, use Cloudflare's test keys so the real flow runs. Pair always-pass secret `1x0000000000000000000000000000000AA` with site key `1x00000000000000000000AA`. A script calling `POST /api/auth/guest` directly sends `{"turnstileToken":"XXXX.DUMMY.TOKEN.XXXX"}`. Secret `2x0000000000000000000000000000000AA` always fails and `3x0000000000000000000000000000000AA` answers "already spent", for testing the error toasts. Test keys still call Cloudflare, so an offline run must blank both keys, which turns the check off. Guest creation is also rate limited (`RATE_LIMIT_ENABLED=false` for scripted runs).
 
