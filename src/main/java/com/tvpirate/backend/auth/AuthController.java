@@ -9,6 +9,7 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.CookieValue;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -78,6 +79,18 @@ public class AuthController {
         if (refreshToken != null && !refreshToken.isBlank()) {
             authService.logout(refreshToken);
         }
+        expireAuthCookies(response);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** Here rather than under /api/me because it must expire the same cookies logout does. */
+    @DeleteMapping("/account")
+    public ResponseEntity<Void> deleteAccount(Authentication authentication, HttpServletResponse response) {
+        // /api/auth/** is permitAll, so the sign-in check is ours to make.
+        if (authentication == null || !(authentication.getPrincipal() instanceof AuthedUser user)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not signed in");
+        }
+        authService.deleteAccount(user.id());
         expireAuthCookies(response);
         return ResponseEntity.noContent().build();
     }

@@ -77,6 +77,12 @@ public class AuthService {
         return issueTokens(stored.getUser());
     }
 
+    /** ON DELETE CASCADE takes the user's tokens, progress and favourites with the row. */
+    @Transactional
+    public void deleteAccount(long userId) {
+        userRepository.deleteById(userId);
+    }
+
     /** Logout: burn the refresh token row. Idempotent — a missing token is fine. */
     @Transactional
     public void logout(String refreshToken) {
