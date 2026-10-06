@@ -38,6 +38,9 @@ public class UserEntity {
     @Column(nullable = false)
     private AuthProvider provider;
 
+    /** The provider's own account id (Google's sub); null for guests. */
+    private String providerSubject;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -62,6 +65,12 @@ public class UserEntity {
         this.profilePictureUrl = profilePictureUrl;
     }
 
+    public UserEntity(String username, String email, AuthProvider provider, String profilePictureUrl,
+                      String providerSubject) {
+        this(username, email, provider, profilePictureUrl);
+        this.providerSubject = providerSubject;
+    }
+
     public Long getId() {
         return id;
     }
@@ -80,6 +89,14 @@ public class UserEntity {
 
     public String getProfilePictureUrl() {
         return profilePictureUrl;
+    }
+
+    public void setProfilePictureUrl(String profilePictureUrl) {
+        this.profilePictureUrl = profilePictureUrl;
+    }
+
+    public String getProviderSubject() {
+        return providerSubject;
     }
 
     public Instant getCreatedAt() {

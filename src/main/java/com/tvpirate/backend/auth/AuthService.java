@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.tvpirate.backend.auth.dto.AuthResponse;
+import com.tvpirate.backend.auth.dto.GoogleProfile;
 import com.tvpirate.backend.security.JwtService;
 import com.tvpirate.backend.user.AuthProvider;
 import com.tvpirate.backend.user.UserEntity;
@@ -42,6 +43,16 @@ public class AuthService {
         UserEntity guest = new UserEntity(generateGuestUsername(), null, AuthProvider.GUEST);
         userRepository.save(guest);
         return issueTokens(guest);
+    }
+
+    /** Finds the account by Google's permanent id, creating it on first sign-in. */
+    @Transactional
+    public AuthResponse loginWithGoogle(GoogleProfile profile) {
+        UserEntity user = userRepository.findByProviderAndProviderSubject(AuthProvider.GOOGLE, profile.sub())
+                .orElseGet(() -> userRepository.save(createGoogleUser(profile)));
+        // Google rotates picture URLs, so the stored one goes stale.
+        user.setProfilePictureUrl(profile.picture());
+        return issueTokens(user);
     }
 
     /**
@@ -86,6 +97,25 @@ public class AuthService {
         Instant expiresAt = Instant.now().plus(jwtService.getRefreshTtl());
         refreshTokenRepository.save(new RefreshTokenEntity(sha256(refreshToken), user, expiresAt));
         return AuthResponse.of(accessToken, refreshToken, user);
+    }
+
+    private UserEntity createGoogleUser(GoogleProfile profile) {
+        // email is unique: if a recreated Google account reuses one we already hold, keep the new account email-less.
+        String email = profile.emailVerified() && userRepository.findByEmail(profile.email()).isEmpty()
+                ? profile.email()
+                : null;
+        return new UserEntity(generateGoogleUsername(profile), email, AuthProvider.GOOGLE,
+                profile.picture(), profile.sub());
+    }
+
+    /** The Google display name, suffixed only when another account already has it. */
+    private String generateGoogleUsername(GoogleProfile profile) {
+        String base = profile.name() == null || profile.name().isBlank() ? "user" : profile.name();
+        String username = base;
+        while (userRepository.existsByUsername(username)) {
+            username = base + "-" + randomString(4);
+        }
+        return username;
     }
 
     private String generateGuestUsername() {

@@ -14,7 +14,9 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
 
     boolean existsByUsername(String username);
 
-    Optional<UserEntity> findByEmail(String email); // for future social login
+    Optional<UserEntity> findByEmail(String email);
+
+    Optional<UserEntity> findByProviderAndProviderSubject(AuthProvider provider, String providerSubject);
 
     /** The daily guest sweep: accounts whose activity clock went stale. */
     List<UserEntity> findByProviderAndLastActivityAtBefore(AuthProvider provider, Instant cutoff);
