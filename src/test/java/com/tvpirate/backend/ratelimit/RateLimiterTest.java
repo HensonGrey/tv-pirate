@@ -99,6 +99,15 @@ class RateLimiterTest {
     }
 
     @Test
+    void anOwnOnlyChargeLeavesTheGlobalBucketAlone() {
+        for (int network = 0; network < 100; network++) {
+            assertThat(limiter.tryConsumeOwn(GUEST_CREATE, Tier.GUEST, "n10.0.0." + network).allowed()).isTrue();
+        }
+
+        assertThat(limiter.tryConsume(GUEST_CREATE, Tier.GUEST, "n203.0.113.7").allowed()).isTrue();
+    }
+
+    @Test
     void aGlobalTripLogsOneWarnPerMinuteNotOnePerRejection() {
         for (int user = 0; user < 6; user++) {
             consume(STREAM_RESOLVE, Tier.GUEST, "u" + user, 10);

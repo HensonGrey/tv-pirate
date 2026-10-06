@@ -25,7 +25,12 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     private static final Duration IN_FLIGHT_RETRY = Duration.ofSeconds(1);
     private static final String SLOT_ATTRIBUTE = RateLimitInterceptor.class.getName() + ".slot";
 
+    private static final String GLOBAL_CHARGE_ATTRIBUTE = RateLimitInterceptor.class.getName() + ".globalCharge";
+
     private record Slot(InFlightLimiter limiter, String key) {
+    }
+
+    private record GlobalCharge(RateLimiter rateLimiter, RateLimitPolicy policy, Tier tier, String key) {
     }
 
     private final RateLimiter rateLimiter;
@@ -58,12 +63,29 @@ public class RateLimitInterceptor implements HandlerInterceptor {
             request.setAttribute(SLOT_ATTRIBUTE, new Slot(limiter, key));
         }
 
-        RateLimiter.Decision decision = rateLimiter.tryConsume(policy, tier, key);
+        RateLimiter.Decision decision = policy.globalChargedByHandler()
+                ? rateLimiter.tryConsumeOwn(policy, tier, key)
+                : rateLimiter.tryConsume(policy, tier, key);
         if (!decision.allowed()) {
             releaseSlot(request);
             throw new RateLimitExceededException(decision.retryAfter());
         }
+        if (policy.globalChargedByHandler()) {
+            request.setAttribute(GLOBAL_CHARGE_ATTRIBUTE, new GlobalCharge(rateLimiter, policy, tier, key));
+        }
         return true;
+    }
+
+    /** The global charge a {@link RateLimitPolicy#globalChargedByHandler()} policy leaves to
+     * its handler; a no-op when rate limiting is off. */
+    public static void chargeGlobal(HttpServletRequest request) {
+        if (request.getAttribute(GLOBAL_CHARGE_ATTRIBUTE) instanceof GlobalCharge charge) {
+            request.removeAttribute(GLOBAL_CHARGE_ATTRIBUTE);
+            RateLimiter.Decision decision = charge.rateLimiter().tryConsumeGlobal(charge.policy(), charge.tier(), charge.key());
+            if (!decision.allowed()) {
+                throw new RateLimitExceededException(decision.retryAfter());
+            }
+        }
     }
 
     /** Runs after the handler returns or throws, so a slot can't leak. */

@@ -30,6 +30,7 @@ import com.tvpirate.backend.auth.dto.AuthResponse;
 import com.tvpirate.backend.auth.dto.GoogleProfile;
 import com.tvpirate.backend.auth.dto.GuestRequest;
 import com.tvpirate.backend.auth.dto.UserDto;
+import com.tvpirate.backend.ratelimit.RateLimitInterceptor;
 import com.tvpirate.backend.ratelimit.RateLimitPolicy;
 import com.tvpirate.backend.ratelimit.RateLimited;
 import com.tvpirate.backend.security.AuthedUser;
@@ -90,6 +91,7 @@ public class AuthController {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, failure.message());
             });
         }
+        RateLimitInterceptor.chargeGlobal(request);
         AuthResponse auth = authService.loginAsGuest();
         setAuthCookies(response, auth);
         return auth.user();

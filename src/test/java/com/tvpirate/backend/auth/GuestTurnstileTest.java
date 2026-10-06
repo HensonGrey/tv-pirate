@@ -17,15 +17,23 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.test.web.client.ExpectedCount;
 import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.test.web.client.ResponseCreator;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.client.RestClient;
 
+import com.tvpirate.backend.api.GlobalExceptionHandler;
 import com.tvpirate.backend.auth.dto.AuthResponse;
 import com.tvpirate.backend.auth.dto.UserDto;
+import com.tvpirate.backend.ratelimit.RateLimitInterceptor;
+import com.tvpirate.backend.ratelimit.RateLimitPolicy;
+import com.tvpirate.backend.ratelimit.RateLimiter;
+
+import io.github.bucket4j.TimeMeter;
 
 /** The guest endpoint through MockMvc, with the real Turnstile client talking to a
  * fake Cloudflare that fails the test on any request it wasn't told to expect. */
@@ -34,6 +42,7 @@ class GuestTurnstileTest {
     private static final String SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
     private MockRestServiceServer cloudflare;
+    private RestClient restClient;
     private FakeAuthService authService;
     private MockMvc mockMvc;
 
@@ -41,8 +50,9 @@ class GuestTurnstileTest {
     void setUp() {
         RestClient.Builder builder = RestClient.builder();
         cloudflare = MockRestServiceServer.bindTo(builder).build();
+        restClient = builder.build();
         authService = new FakeAuthService();
-        mockMvc = mvcFor(new TurnstileClient(builder.build(), "the-secret"));
+        mockMvc = mvcFor(new TurnstileClient(restClient, "the-secret"));
     }
 
     @Test
@@ -113,6 +123,48 @@ class GuestTurnstileTest {
         assertThat(authService.guestsCreated).isEqualTo(1);
     }
 
+    @Test
+    void refusedRequestsFromManyNetworksDontSpendTheSiteWideAllowance() throws Exception {
+        MockMvc limited = mvcWithRateLimits();
+        for (int network = 0; network < 70; network++) {
+            assertThat(limited.perform(post("/api/auth/guest").with(fromIp("10.0.0." + network)))
+                    .andReturn().getResponse().getStatus()).isEqualTo(403);
+        }
+        cloudflare.expect(requestTo(SITEVERIFY_URL)).andRespond(cloudflarePasses());
+
+        assertThat(limited.perform(guest("good-token")).andReturn().getResponse().getStatus()).isEqualTo(200);
+        assertThat(authService.guestsCreated).isEqualTo(1);
+    }
+
+    @Test
+    void verifiedGuestsStillSpendTheSiteWideAllowance() throws Exception {
+        MockMvc limited = mvcWithRateLimits();
+        int siteWide = (int) RateLimitPolicy.GUEST_CREATE.global().capacity();
+        cloudflare.expect(ExpectedCount.times(siteWide + 1), requestTo(SITEVERIFY_URL)).andRespond(cloudflarePasses());
+        for (int network = 0; network < siteWide; network++) {
+            assertThat(limited.perform(guest("good-token", "10.0.0." + network))
+                    .andReturn().getResponse().getStatus()).isEqualTo(200);
+        }
+
+        assertThat(limited.perform(guest("good-token")).andReturn().getResponse().getStatus()).isEqualTo(429);
+        cloudflare.verify();
+        assertThat(authService.guestsCreated).isEqualTo(siteWide);
+    }
+
+    private MockMvc mvcWithRateLimits() {
+        AuthController controller = new AuthController(authService,
+                new GoogleOAuthClient(RestClient.create(), "", "", "http://unused"),
+                new TurnstileClient(restClient, "the-secret"), false, "http://frontend.test");
+        return MockMvcBuilders.standaloneSetup(controller)
+                .addInterceptors(new RateLimitInterceptor(new RateLimiter(TimeMeter.SYSTEM_NANOTIME)))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+    }
+
+    private static ResponseCreator cloudflarePasses() {
+        return withSuccess("{\"success\":true,\"hostname\":\"localhost\"}", MediaType.APPLICATION_JSON);
+    }
+
     private void cloudflareRefusesWith(String errorCode) {
         cloudflare.expect(requestTo(SITEVERIFY_URL))
                 .andRespond(withSuccess("{\"success\":false,\"error-codes\":[\"" + errorCode + "\"]}",
@@ -134,15 +186,23 @@ class GuestTurnstileTest {
     }
 
     private static MockHttpServletRequestBuilder guest(String token) {
+        return guest(token, "203.0.113.7");
+    }
+
+    private static MockHttpServletRequestBuilder guest(String token, String ip) {
         return post("/api/auth/guest")
-                .with(fromIp())
+                .with(fromIp(ip))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"turnstileToken\":\"" + token + "\"}");
     }
 
     private static RequestPostProcessor fromIp() {
+        return fromIp("203.0.113.7");
+    }
+
+    private static RequestPostProcessor fromIp(String ip) {
         return request -> {
-            request.setRemoteAddr("203.0.113.7");
+            request.setRemoteAddr(ip);
             return request;
         };
     }

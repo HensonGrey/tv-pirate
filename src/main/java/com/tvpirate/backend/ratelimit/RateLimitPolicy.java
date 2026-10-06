@@ -69,6 +69,12 @@ public enum RateLimitPolicy {
         return global;
     }
 
+    /** The handler charges the global cap itself once it has vetted the caller, so callers
+     * it turns away can't drain it. vault:rate-limiting-deep-dive#vpn */
+    public boolean globalChargedByHandler() {
+        return this == GUEST_CREATE;
+    }
+
     /** 0 = no at-once cap. */
     public int inFlightPerKey() {
         return inFlightPerKey;

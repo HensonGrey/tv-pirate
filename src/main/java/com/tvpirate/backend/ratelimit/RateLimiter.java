@@ -58,14 +58,20 @@ public class RateLimiter {
         }
     }
 
-    /** Takes one token from the caller's bucket, then from the global one; a
-     * global refusal hands the caller's token back so it isn't charged twice. */
+    /** Takes one token from the caller's bucket, then from the global one. */
     public Decision tryConsume(RateLimitPolicy policy, Tier tier, String key) {
-        Bucket own = buckets.get(policy).get(tier + ":" + key, k -> newBucket(policy.limits(tier)));
-        ConsumptionProbe probe = own.tryConsumeAndReturnRemaining(1);
-        if (!probe.isConsumed()) {
-            return rejected(probe);
-        }
+        Decision own = tryConsumeOwn(policy, tier, key);
+        return own.allowed() ? tryConsumeGlobal(policy, tier, key) : own;
+    }
+
+    public Decision tryConsumeOwn(RateLimitPolicy policy, Tier tier, String key) {
+        ConsumptionProbe probe = bucket(policy, tier, key).tryConsumeAndReturnRemaining(1);
+        return probe.isConsumed() ? Decision.ALLOWED : rejected(probe);
+    }
+
+    /** For a caller whose own token is already taken; a refusal hands that token
+     * back so it isn't charged twice. */
+    public Decision tryConsumeGlobal(RateLimitPolicy policy, Tier tier, String key) {
         Bucket global = globals.get(policy);
         if (global == null) {
             return Decision.ALLOWED;
@@ -74,9 +80,13 @@ public class RateLimiter {
         if (globalProbe.isConsumed()) {
             return Decision.ALLOWED;
         }
-        own.addTokens(1);
+        bucket(policy, tier, key).addTokens(1);
         warnGlobalTrip(policy);
         return rejected(globalProbe);
+    }
+
+    private Bucket bucket(RateLimitPolicy policy, Tier tier, String key) {
+        return buckets.get(policy).get(tier + ":" + key, k -> newBucket(policy.limits(tier)));
     }
 
     /** The VPN-attack tripwire: a global cap only trips when many callers pile
