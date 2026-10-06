@@ -1,7 +1,14 @@
 package com.tvpirate.backend.auth;
 
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.time.Duration;
+import java.util.Base64;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -10,12 +17,16 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.tvpirate.backend.auth.dto.AuthResponse;
+import com.tvpirate.backend.auth.dto.GoogleProfile;
 import com.tvpirate.backend.auth.dto.UserDto;
 import com.tvpirate.backend.ratelimit.RateLimitPolicy;
 import com.tvpirate.backend.ratelimit.RateLimited;
@@ -32,17 +43,29 @@ import jakarta.servlet.http.HttpServletResponse;
 @RateLimited(RateLimitPolicy.AUTH_SESSION)
 public class AuthController {
 
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
+
     private static final String ACCESS_COOKIE = "access_token";
     private static final String REFRESH_COOKIE = "refresh_token";
     private static final String REFRESH_PATH = "/api/auth";
+    private static final String STATE_COOKIE = "oauth_state";
+    private static final String GOOGLE_PATH = "/api/auth/google";
+    private static final Duration STATE_TTL = Duration.ofMinutes(10);
 
     private final AuthService authService;
+    private final GoogleOAuthClient googleOAuthClient;
     private final boolean cookieSecure;
+    private final String frontendUrl;
+    private final SecureRandom random = new SecureRandom();
 
     public AuthController(AuthService authService,
-                          @Value("${app.cookie.secure:false}") boolean cookieSecure) {
+                          GoogleOAuthClient googleOAuthClient,
+                          @Value("${app.cookie.secure:false}") boolean cookieSecure,
+                          @Value("${app.frontend-url:http://localhost:5173}") String frontendUrl) {
         this.authService = authService;
+        this.googleOAuthClient = googleOAuthClient;
         this.cookieSecure = cookieSecure;
+        this.frontendUrl = frontendUrl;
     }
 
     // A DB row + token pair with no credentials, so the strictest limit. vault:rate-limiting-deep-dive#policies
@@ -57,6 +80,45 @@ public class AuthController {
         AuthResponse auth = authService.loginAsGuest();
         setAuthCookies(response, auth);
         return auth.user();
+    }
+
+    /** A full-page navigation, not an XHR: the browser goes to Google's consent screen
+     * carrying a state that only this browser also holds in a cookie. */
+    @GetMapping("/google")
+    public ResponseEntity<Void> startGoogleSignIn(HttpServletResponse response) {
+        if (!googleOAuthClient.isConfigured()) {
+            return redirectToLogin(SignInErrorEnum.UNAVAILABLE);
+        }
+        String state = generateState();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie(STATE_COOKIE, state, GOOGLE_PATH, STATE_TTL).toString());
+        return redirectTo(googleOAuthClient.buildAuthorizationUrl(state));
+    }
+
+    /** Google sends the browser back here. A state that doesn't match the cookie means
+     * another site started this sign-in (login CSRF), so it's refused. */
+    @GetMapping("/google/callback")
+    public ResponseEntity<Void> finishGoogleSignIn(@RequestParam(required = false) String code,
+                                                   @RequestParam(required = false) String state,
+                                                   @RequestParam(required = false) String error,
+                                                   @CookieValue(name = STATE_COOKIE, required = false) String expectedState,
+                                                   HttpServletResponse response) {
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie(STATE_COOKIE, "", GOOGLE_PATH, Duration.ZERO).toString());
+        if (error != null) {
+            return redirectToLogin("access_denied".equals(error) ? SignInErrorEnum.CANCELLED : SignInErrorEnum.FAILED);
+        }
+        if (code == null || !stateMatches(expectedState, state)) {
+            return redirectToLogin(SignInErrorEnum.FAILED);
+        }
+        GoogleProfile profile;
+        try {
+            profile = googleOAuthClient.fetchProfileForCode(code);
+        } catch (RestClientException e) {
+            // A wrong secret or redirect URI shows up here as Google's 400/401.
+            log.warn("Google refused the sign-in code: {}", e.getMessage());
+            return redirectToLogin(SignInErrorEnum.FAILED);
+        }
+        setAuthCookies(response, authService.loginWithGoogle(profile));
+        return redirectTo(frontendUrl + "/");
     }
 
     /** The refresh cookie arrives automatically — the client POSTs with an
@@ -93,6 +155,25 @@ public class AuthController {
         authService.deleteAccount(user.id());
         expireAuthCookies(response);
         return ResponseEntity.noContent().build();
+    }
+
+    private String generateState() {
+        byte[] bytes = new byte[32];
+        random.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private static boolean stateMatches(String expected, String actual) {
+        return expected != null && actual != null
+                && MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8), actual.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private ResponseEntity<Void> redirectToLogin(SignInErrorEnum error) {
+        return redirectTo(frontendUrl + "/login?signInError=" + error.queryValue());
+    }
+
+    private static ResponseEntity<Void> redirectTo(String url) {
+        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(url)).build();
     }
 
     private void setAuthCookies(HttpServletResponse response, AuthResponse auth) {

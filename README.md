@@ -6,7 +6,9 @@ Spring Boot backend for the tv-pirate learning project.
 
 ## Features
 
-- **Guest login** (`POST /api/auth/guest`) — one-click account, no password anywhere in the schema. Google OAuth is planned (button stub on the frontend), credentials don't exist yet.
+- **Guest login** (`POST /api/auth/guest`) — one-click account, no password anywhere in the schema.
+- **Google sign-in** — server-side authorization-code redirect: a `state` cookie guards against login CSRF, and accounts are keyed on Google's permanent `sub`, not the email. Needs `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` in `.env`, plus `http://localhost:8080/api/auth/google/callback` registered as a redirect URI on the OAuth client.
+- **Account deletion** (`DELETE /api/auth/account`) — the FK cascade removes everything the user owns.
 - **httpOnly cookie session** — JWT access token (15 min) + opaque refresh token (30 days) delivered as `HttpOnly`, `SameSite=Lax` cookies. JS never sees them.
 - **Refresh rotation** — refresh tokens are SHA-256 hashed in the DB and burned on use (replay → 401), so sessions renew silently and indefinitely.
 - **Session probe** (`GET /api/me`) — the frontend's way to answer "am I logged in?" without touching token storage.
@@ -19,7 +21,10 @@ Spring Boot backend for the tv-pirate learning project.
 |---|---|---|
 | `POST /api/auth/guest` | public | guest account + token-pair cookies |
 | `POST /api/auth/refresh` | cookie | rotate: burn old refresh token, issue new pair |
+| `GET /api/auth/google` | public | redirect to Google's consent screen |
+| `GET /api/auth/google/callback` | public | Google returns here; sets the token-pair cookies and redirects to the frontend |
 | `POST /api/auth/logout` | cookie | burn refresh token, expire cookies |
+| `DELETE /api/auth/account` | cookie | delete the account, expire cookies |
 | `GET /api/me` | protected | session probe |
 
 The JWT filter reads the `access_token` cookie first and falls back to the `Authorization: Bearer` header (curl/Postman).
