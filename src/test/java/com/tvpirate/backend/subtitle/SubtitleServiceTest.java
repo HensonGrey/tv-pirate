@@ -103,6 +103,20 @@ class SubtitleServiceTest {
         api.verify();
     }
 
+    @Test
+    void aTrackOnDiskOrARememberedMissCountsAsCached() throws Exception {
+        assertThat(service.isCached("movie", 550, null, null, "en")).isFalse();
+        Files.writeString(cacheDir.resolve("550-movie-sxex-en-77.vtt"), VTT);
+        assertThat(service.isCached("movie", 550, null, null, "en")).isTrue();
+
+        expectSearch("https://api.opensubtitles.com/api/v1/subtitles?languages=pt&tmdb_id=550", "{\"data\":[]}");
+        assertThat(service.isCached("movie", 550, null, null, "pt")).isFalse();
+        assertThatThrownBy(() -> service.resolve("movie", 550, null, null, "pt"))
+                .isInstanceOf(ResponseStatusException.class);
+        assertThat(service.isCached("movie", 550, null, null, "pt")).isTrue();
+        api.verify();
+    }
+
     private void expectSearch(String url, String body) {
         api.expect(requestTo(url)).andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess(body, MediaType.APPLICATION_JSON));

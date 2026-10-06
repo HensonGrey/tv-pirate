@@ -52,12 +52,25 @@ public class StreamService {
      * re-hammering an upstream while it's broken.
      */
     public List<StreamSource> resolve(String provider, ResolveRequest request) {
+        StreamProvider impl = providerFor(provider);
+        return cache.get(keyFor(provider, request), k -> impl.resolve(request));
+    }
+
+    /** Whether a resolve would be answered without calling the provider. */
+    public boolean isCached(String provider, ResolveRequest request) {
+        providerFor(provider);
+        return cache.getIfPresent(keyFor(provider, request)) != null;
+    }
+
+    private StreamProvider providerFor(String provider) {
         StreamProvider impl = providers.get(provider);
         if (impl == null) {
             throw new IllegalArgumentException("unknown provider: " + provider);
         }
-        StreamKey key = new StreamKey(provider, request.mediaType(),
-                request.tmdbId(), request.season(), request.episode());
-        return cache.get(key, k -> impl.resolve(request));
+        return impl;
+    }
+
+    private static StreamKey keyFor(String provider, ResolveRequest request) {
+        return new StreamKey(provider, request.mediaType(), request.tmdbId(), request.season(), request.episode());
     }
 }

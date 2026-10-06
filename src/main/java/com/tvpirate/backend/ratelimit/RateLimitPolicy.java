@@ -69,10 +69,10 @@ public enum RateLimitPolicy {
         return global;
     }
 
-    /** The handler charges the global cap itself once it has vetted the caller, so callers
-     * it turns away can't drain it. vault:rate-limiting-deep-dive#vpn */
+    /** The handler charges the global cap itself, only for calls that cost what the cap protects
+     * (a guest past the bot check, a cache miss), so free calls can't drain it. vault:rate-limiting-deep-dive#vpn */
     public boolean globalChargedByHandler() {
-        return this == GUEST_CREATE;
+        return this == GUEST_CREATE || this == STREAM_RESOLVE || this == SUBTITLES;
     }
 
     /** 0 = no at-once cap. */

@@ -14,12 +14,15 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.tvpirate.backend.ratelimit.RateLimitInterceptor;
 import com.tvpirate.backend.ratelimit.RateLimitPolicy;
 import com.tvpirate.backend.ratelimit.RateLimited;
 import com.tvpirate.backend.security.AuthedUser;
 import com.tvpirate.backend.stream.StreamProvider.ResolveRequest;
 import com.tvpirate.backend.stream.StreamProvider.StreamSource;
 import com.tvpirate.backend.stream.dto.SourceDto;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 /** The stream API: the picker list, resolve-one-provider-on-play, and the
  * token-guarded playback proxy. The proxy path is permitAll in SecurityConfig
@@ -52,7 +55,8 @@ public class StreamController {
                                    @RequestParam long tmdbId,
                                    @RequestParam(required = false) Integer season,
                                    @RequestParam(required = false) Integer episode,
-                                   Authentication authentication) {
+                                   Authentication authentication,
+                                   HttpServletRequest httpRequest) {
         if (!type.equals("movie") && !type.equals("tv")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "type must be movie or tv");
         }
@@ -61,8 +65,11 @@ public class StreamController {
         }
         List<StreamSource> resolved;
         try {
-            resolved = streamService.resolve(provider,
-                    new ResolveRequest(type, tmdbId, season, episode));
+            ResolveRequest request = new ResolveRequest(type, tmdbId, season, episode);
+            if (!streamService.isCached(provider, request)) {
+                RateLimitInterceptor.chargeGlobal(httpRequest);
+            }
+            resolved = streamService.resolve(provider, request);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }

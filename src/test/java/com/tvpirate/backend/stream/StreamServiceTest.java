@@ -116,6 +116,27 @@ class StreamServiceTest {
         assertThat(provider.calls()).isEqualTo(1);
     }
 
+    @Test
+    void aTitleCountsAsCachedOnceItIsResolved() {
+        CountingProvider provider = new CountingProvider("vixsrc");
+        StreamService service = new StreamService(List.of(provider));
+
+        assertThat(service.isCached("vixsrc", movie(550))).isFalse();
+        service.resolve("vixsrc", movie(550));
+
+        assertThat(service.isCached("vixsrc", movie(550))).isTrue();
+        assertThat(service.isCached("vixsrc", movie(27205))).isFalse();
+        assertThat(provider.calls()).isEqualTo(1);
+    }
+
+    @Test
+    void theCacheCheckRejectsAnUnknownProviderToo() {
+        StreamService service = new StreamService(List.of(new CountingProvider("vixsrc")));
+
+        assertThatExceptionOfType(IllegalArgumentException.class)
+                .isThrownBy(() -> service.isCached("vidlink", movie(550)));
+    }
+
     // --- what makes a cache key ---
 
     @Test

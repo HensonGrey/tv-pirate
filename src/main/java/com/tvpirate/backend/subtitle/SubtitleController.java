@@ -14,8 +14,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.tvpirate.backend.ratelimit.RateLimitInterceptor;
 import com.tvpirate.backend.ratelimit.RateLimitPolicy;
 import com.tvpirate.backend.ratelimit.RateLimited;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 /** The subtitle endpoint: one VTT track per title/episode, resolved and
  * cached server-side so the OpenSubtitles key never reaches the browser.
@@ -40,7 +43,8 @@ public class SubtitleController {
                                             @RequestParam long tmdbId,
                                             @RequestParam(required = false) Integer season,
                                             @RequestParam(required = false) Integer episode,
-                                            @RequestParam(defaultValue = "en") String lang) {
+                                            @RequestParam(defaultValue = "en") String lang,
+                                            HttpServletRequest request) {
         if (!type.equals("movie") && !type.equals("tv")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "type must be movie or tv");
         }
@@ -49,6 +53,9 @@ public class SubtitleController {
         }
         if (!LANG_PATTERN.matcher(lang).matches()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "lang must be an ISO 639 code like en or pt-BR");
+        }
+        if (!subtitleService.isCached(type, tmdbId, season, episode, lang)) {
+            RateLimitInterceptor.chargeGlobal(request);
         }
         byte[] vtt = subtitleService.resolve(type, tmdbId, season, episode, lang);
         return ResponseEntity.ok()

@@ -95,6 +95,12 @@ public class SubtitleService {
         return factory;
     }
 
+    /** Whether a resolve would be answered without calling OpenSubtitles: a track on disk, or a remembered miss. */
+    public boolean isCached(String mediaType, long tmdbId, Integer season, Integer episode, String lang) {
+        String title = titleKey(tmdbId, mediaType, season, episode, lang);
+        return readCached(title) != null || misses.getIfPresent(title) != null;
+    }
+
     /** The subtitle track for one title/episode as VTT bytes — 404 when
      * nothing matches, 503 when the upstream says no (no key configured,
      * quota exhausted), 502 when OpenSubtitles is unreachable. */
