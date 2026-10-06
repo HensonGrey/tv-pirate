@@ -41,4 +41,25 @@ cp .env.example .env
 
 Requires a local PostgreSQL database named `tv-pirate`. Schema is managed by **Liquibase migrations** (every change has an up + `--rollback` down, see `src/main/resources/db/changelog/` — that folder's `agents.md` has the workflow); Hibernate runs in `validate` mode and never alters the DB.
 
+## Before deploying (Oracle Cloud VM + Caddy)
+
+- [ ] **Credentials** below: create the prod values and put them in the VM's `.env`.
+- [ ] **Privacy notice** page, linked from the app: who runs it, what is stored and why, retention, rights and the CPDP complaint route.
+- [ ] **Caddy:** only 80/443 public; 8080 stays private. Raise the at-once caps in `RateLimitPolicy` together with `server.tomcat.threads.max`.
+- [ ] **Env switches:** `COOKIE_SECURE=true`, `CORS_ALLOWED_ORIGINS` and `FRONTEND_URL` set to the prod origin, `RATE_LIMIT_ENABLED=true`.
+- [ ] **Frontend build:** `VITE_API_BASE_URL` is read at build time, so build with the prod API URL.
+
+### Credentials per environment
+
+Names only, never commit the values. Stream providers (Videasy, Vixsrc) need no key.
+
+| Service | Env var(s) | Required | Dev | Prod |
+|---|---|---|---|---|
+| Postgres | `DB_USERNAME`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` | yes | local `tv-pirate` DB | the VM's Postgres, with its own user and password |
+| JWT signing | `JWT_SECRET` | yes | any 32+ byte random value | a **new** random value; changing it later signs everyone out |
+| TMDB | `TMDB_READ_ACCESS_TOKEN` | yes | the v4 read token from themoviedb.org/settings/api | the same token works, or create a second one to keep them apart |
+| OpenSubtitles | `OPENSUBTITLES_API_KEY` | no, no captions without it | the key from opensubtitles.com/consumers | the same key, mind the small daily quota; a separate consumer for prod keeps the quota apart |
+| Google sign-in | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | no, guests only without it | OAuth client with `http://localhost:8080/api/auth/google/callback` registered | a separate OAuth client; register `https://<api-domain>/api/auth/google/callback` exactly as `GOOGLE_REDIRECT_URI`, and publish the consent screen or add each user as a test user |
+| Cloudflare Turnstile | `TURNSTILE_SECRET_KEY` (FE: `VITE_TURNSTILE_SITE_KEY`) | yes in prod, guest creation skips the bot check without it | Cloudflare's always-pass test keys, or the real widget with `localhost` on its hostname list | the real widget's secret, with the prod FE domain on its hostname list |
+
 Frontend: [tv-pirate-frontend](https://github.com/HensonGrey/tv-pirate-frontend)
