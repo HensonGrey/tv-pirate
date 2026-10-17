@@ -50,6 +50,12 @@ docker compose -f backend/compose.yml up -d --build            # first start, an
 docker compose -f backend/compose.yml logs --tail 100 backend  # what the backend printed
 ```
 
+**Backups:** `backup.sh` copies the database to the Cloudflare R2 bucket `tv-pirate-backup` every night. Cron on the VM runs it at `15 4 * * *` UTC, and the bucket's lifecycle rule keeps 30 days of copies. A failure logs an ERROR to New Relic. To restore a copy downloaded from the bucket (on a fresh server, start only the database first with `up -d db`):
+
+```bash
+gunzip -c tv-pirate-YYYY-MM-DD.sql.gz | docker compose -f backend/compose.yml exec -T db sh -c 'psql -U "$POSTGRES_USER" tv-pirate'
+```
+
 - [ ] **Credentials** below: create the prod values and put them in the VM's `.env`, plus `DOMAIN` and the two `VITE_` values, which compose bakes into the frontend build.
 - [ ] **Privacy notice** page, linked from the app: who runs it, what is stored and why, retention, rights and the CPDP complaint route.
 - [ ] **Capacity:** raise the at-once caps in `RateLimitPolicy` together with `server.tomcat.threads.max`.
