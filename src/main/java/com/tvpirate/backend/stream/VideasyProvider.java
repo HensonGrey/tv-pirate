@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 import com.tvpirate.backend.tmdb.TmdbClient;
 import com.tvpirate.backend.tmdb.TmdbService;
@@ -114,6 +115,10 @@ public class VideasyProvider implements StreamProvider {
                             s.url().contains(".m3u8") ? "hls" : "mp4"))
                     .sorted(Comparator.comparingInt(s -> qualityNumber(s.quality())))
                     .toList();
+        } catch (RestClientResponseException e) {
+            // The imdbId lookup above is a TMDB call, so the stack trace tells which service answered.
+            log.warn("videasy resolve: upstream answered with status {} for tmdb {}", e.getStatusCode().value(), request.tmdbId(), e);
+            return List.of();
         } catch (RestClientException | IllegalArgumentException e) {
             // Fast-fail: the caller surfaces "no sources", nothing retries here.
             log.warn("videasy resolve failed for tmdb {}", request.tmdbId(), e);

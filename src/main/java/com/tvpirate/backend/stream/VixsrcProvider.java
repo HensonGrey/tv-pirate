@@ -15,6 +15,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 /**
  * vixsrc.to — vidsrc-style HLS provider. The API hands out a signed embed
@@ -114,6 +115,9 @@ public class VixsrcProvider implements StreamProvider {
             }
             sources.sort(Comparator.comparingInt(s -> qualityNumber(s.quality())));
             return sources;
+        } catch (RestClientResponseException e) {
+            log.warn("vixsrc answered with status {} for tmdb {}", e.getStatusCode().value(), request.tmdbId(), e);
+            return List.of();
         } catch (RestClientException | IllegalArgumentException e) {
             // Fast-fail: the caller surfaces "no sources", nothing retries here.
             log.warn("vixsrc resolve failed for tmdb {}", request.tmdbId(), e);

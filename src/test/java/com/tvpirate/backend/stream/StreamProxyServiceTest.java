@@ -2,6 +2,8 @@ package com.tvpirate.backend.stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
@@ -11,8 +13,14 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
+import com.sun.net.httpserver.HttpServer;
 import com.tvpirate.backend.stream.StreamProxyService.ProxyTarget;
+
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 
 /** Root tickets are stored, playlist children are sealed: the store must not
  * grow with playlist fetches, and a child must still reach its target with
@@ -159,6 +167,37 @@ class StreamProxyServiceTest {
         assertThat(StreamProxyService.playlistMediaType("not a media type").toString())
                 .isEqualTo("application/vnd.apple.mpegurl");
         assertThat(StreamProxyService.playlistMediaType("text/plain").toString()).isEqualTo("text/plain");
+    }
+
+    @Test
+    void aVideoServersTooManyRequestsIsPassedOnAndLogged() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.createContext("/", exchange -> {
+            exchange.sendResponseHeaders(429, -1);
+            exchange.close();
+        });
+        server.start();
+        ListAppender<ILoggingEvent> logs = new ListAppender<>();
+        logs.start();
+        Logger logger = (Logger) LoggerFactory.getLogger(StreamProxyService.class);
+        logger.addAppender(logs);
+        try {
+            // The fake video server is on loopback, which the real guard rightly refuses.
+            StreamProxyService local = new StreamProxyService(new PublicTargetGuard() {
+                @Override
+                public void assertPublicTarget(String rawUrl) {
+                }
+            });
+            String root = local.register("http://127.0.0.1:" + server.getAddress().getPort() + "/seg-1.ts", Map.of(), OWNER);
+
+            assertThat(local.stream(root, null).getStatusCode().value()).isEqualTo(429);
+            // The New Relic alert matches this wording.
+            assertThat(logs.list).extracting(ILoggingEvent::getFormattedMessage)
+                    .contains("video server 127.0.0.1 answered with status 429");
+        } finally {
+            logger.detachAppender(logs);
+            server.stop(0);
+        }
     }
 
     // --- helpers ---
