@@ -63,7 +63,7 @@ class UserCascadeDeleteIT {
 
         assertThat(foreignKeys)
                 .extracting(fk -> fk.get("child"))
-                .containsExactlyInAnyOrder("refresh_tokens", "watch_progress", "favourites");
+                .containsExactlyInAnyOrder("refresh_tokens", "watch_progress", "favourites", "user_themes");
         // 'c' is Postgres' code for CASCADE; 'a' (no action) is the pre-0008 state.
         assertThat(foreignKeys).allSatisfy(fk -> assertThat(fk.get("delete_rule")).isEqualTo("c"));
     }

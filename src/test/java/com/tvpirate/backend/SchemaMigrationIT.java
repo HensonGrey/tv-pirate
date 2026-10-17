@@ -30,7 +30,7 @@ class SchemaMigrationIT {
                 String.class);
 
         assertThat(tables)
-                .contains("users", "refresh_tokens", "watch_progress", "favourites")
+                .contains("users", "refresh_tokens", "watch_progress", "favourites", "user_themes")
                 .contains("databasechangelog"); // proof the migrations ran rather than ddl-auto
     }
 

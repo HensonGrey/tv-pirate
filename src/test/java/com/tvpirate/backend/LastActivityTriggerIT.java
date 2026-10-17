@@ -87,6 +87,15 @@ class LastActivityTriggerIT {
     }
 
     @Test
+    void choosingAThemeBumpsTheOwnersClock() {
+        backdate(userId);
+
+        jdbc.update("INSERT INTO user_themes (user_id, theme) VALUES (?, 'dark')", userId);
+
+        assertThat(lastActivityOf(userId)).isAfter(STALE);
+    }
+
+    @Test
     void updatingARowBumpsTheClockToo() {
         insertWatchProgress(userId);
         backdate(userId);
