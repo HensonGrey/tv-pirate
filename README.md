@@ -41,14 +41,20 @@ cp .env.example .env
 
 Requires a local PostgreSQL database named `tv-pirate`. Schema is managed by **Liquibase migrations** (every change has an up + `--rollback` down, see `src/main/resources/db/changelog/` — that folder's `agents.md` has the workflow); Hibernate runs in `validate` mode and never alters the DB.
 
-## Before deploying (Oracle Cloud VM + Caddy)
+## Deploy (Oracle Cloud VM + Caddy)
 
-- [ ] **Credentials** below: create the prod values and put them in the VM's `.env`.
+`compose.yml` runs the whole site on one server: Postgres, this backend (the `Dockerfile` bundles the New Relic Java agent), and Caddy from the frontend repo, which serves the built site, gets the HTTPS certificate and passes `/api` here. Only Caddy's 80/443 are public; 8080 and the database stay private. Clone both repos side by side (`~/tv-pirate/backend`, `~/tv-pirate/frontend`), put the production `.env` in `backend/`, then from `~/tv-pirate`:
+
+```bash
+docker compose -f backend/compose.yml up -d --build            # first start, and every update after git pull in both repos
+docker compose -f backend/compose.yml logs --tail 100 backend  # what the backend printed
+```
+
+- [ ] **Credentials** below: create the prod values and put them in the VM's `.env`, plus `DOMAIN` and the two `VITE_` values, which compose bakes into the frontend build.
 - [ ] **Privacy notice** page, linked from the app: who runs it, what is stored and why, retention, rights and the CPDP complaint route.
-- [ ] **Caddy:** only 80/443 public; 8080 stays private. Raise the at-once caps in `RateLimitPolicy` together with `server.tomcat.threads.max`.
+- [ ] **Capacity:** raise the at-once caps in `RateLimitPolicy` together with `server.tomcat.threads.max`.
 - [ ] **Env switches:** `COOKIE_SECURE=true`, `CORS_ALLOWED_ORIGINS` and `FRONTEND_URL` set to the prod origin, `RATE_LIMIT_ENABLED=true`.
-- [ ] **Frontend build:** `VITE_API_BASE_URL` is read at build time, so build with the prod API URL.
-- [ ] **New Relic:** unzip the [Java agent](https://download.newrelic.com/newrelic/java-agent/newrelic-agent/current/newrelic-java.zip) to `/opt/newrelic`, start with `java -javaagent:/opt/newrelic/newrelic.jar -jar <app>.jar` (the flag goes before `-jar`), and pass `.env` to the process as real env vars, since the agent starts before Spring's `.env` import.
+- [ ] **New Relic:** set `NEW_RELIC_LICENSE_KEY`; the image attaches the agent only when it's set and counts only 5xx as errors. Every throttling third party logs `… answered with status 429`, which is what the 429 alert matches.
 
 ### Credentials per environment
 
