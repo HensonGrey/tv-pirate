@@ -45,6 +45,14 @@ class StreamServiceTest {
     }
 
     @Test
+    void availabilityFollowsTheRegistry() {
+        StreamService service = new StreamService(List.of(new CountingProvider("vixsrc")));
+
+        assertThat(service.isAvailable("vixsrc")).isTrue();
+        assertThat(service.isAvailable("videasy")).isFalse();
+    }
+
+    @Test
     void eachProviderIsRegisteredUnderItsOwnName() {
         CountingProvider videasy = new CountingProvider("videasy");
         CountingProvider vixsrc = new CountingProvider("vixsrc");

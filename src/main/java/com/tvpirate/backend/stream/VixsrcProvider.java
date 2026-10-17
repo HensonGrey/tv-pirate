@@ -11,6 +11,7 @@ import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -23,6 +24,7 @@ import org.springframework.web.client.RestClientResponseException;
  * carries per-quality renditions with embedded subs.
  * vault:streaming-providers-deep-dive#vixsrc-wire
  */
+@ConditionalOnProperty(name = "app.providers.vixsrc.enabled", havingValue = "true")
 @Component
 public class VixsrcProvider implements StreamProvider {
 

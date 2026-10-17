@@ -11,6 +11,7 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
@@ -32,6 +33,7 @@ import tools.jackson.databind.json.JsonMapper;
  * stream cipher ported 1:1 from their player bundle (magic "mvm1").
  * vault:streaming-providers-deep-dive#provider-5-hunt
  */
+@ConditionalOnProperty(name = "app.providers.videasy.enabled", havingValue = "true")
 @Component
 public class VideasyProvider implements StreamProvider {
 

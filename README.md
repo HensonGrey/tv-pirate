@@ -59,12 +59,12 @@ gunzip -c tv-pirate-YYYY-MM-DD.sql.gz | docker compose -f backend/compose.yml ex
 - [ ] **Credentials** below: create the prod values and put them in the VM's `.env`, plus `DOMAIN` and the two `VITE_` values, which compose bakes into the frontend build.
 - [ ] **Privacy notice** page, linked from the app: who runs it, what is stored and why, retention, rights and the CPDP complaint route.
 - [ ] **Capacity:** raise the at-once caps in `RateLimitPolicy` together with `server.tomcat.threads.max`.
-- [ ] **Env switches:** `COOKIE_SECURE=true`, `CORS_ALLOWED_ORIGINS` and `FRONTEND_URL` set to the prod origin, `RATE_LIMIT_ENABLED=true`.
+- [ ] **Env switches:** `COOKIE_SECURE=true`, `CORS_ALLOWED_ORIGINS` and `FRONTEND_URL` set to the prod origin, `RATE_LIMIT_ENABLED=true`, and the `PROVIDER_*_ENABLED` flags matching the live providers.
 - [ ] **New Relic:** set `NEW_RELIC_LICENSE_KEY`; the image attaches the agent only when it's set and counts only 5xx as errors. Every throttling third party logs `… answered with status 429`, which is what the 429 alert matches.
 
 ### Credentials per environment
 
-Names only, never commit the values. Stream providers (Videasy, Vixsrc) need no key.
+Names only, never commit the values. Stream providers need no key; each one has a `PROVIDER_*_ENABLED` switch in `.env` (see `.env.example`).
 
 | Service | Env var(s) | Required | Dev | Prod |
 |---|---|---|---|---|

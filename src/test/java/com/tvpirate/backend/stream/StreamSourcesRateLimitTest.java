@@ -98,12 +98,22 @@ class StreamSourcesRateLimitTest {
         assertThat(providerCalls).hasValue(SITE_WIDE);
     }
 
+    @Test
+    void aDisabledProviderIsRejectedBeforeItCostsAnUpstreamCall() throws Exception {
+        assertThat(resolve(1, "videasy", 550)).isEqualTo(404);
+        assertThat(providerCalls).hasValue(0);
+    }
+
     private int resolve(long guestId, long tmdbId) throws Exception {
+        return resolve(guestId, "vixsrc", tmdbId);
+    }
+
+    private int resolve(long guestId, String provider, long tmdbId) throws Exception {
         AuthedUser user = new AuthedUser(guestId, "guest-" + guestId, "GUEST", null);
         var authentication = new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
         SecurityContextHolder.getContext().setAuthentication(authentication);
         return mockMvc.perform(get("/api/stream/sources")
-                        .param("provider", "vixsrc")
+                        .param("provider", provider)
                         .param("type", "movie")
                         .param("tmdbId", String.valueOf(tmdbId))
                         .principal(authentication))

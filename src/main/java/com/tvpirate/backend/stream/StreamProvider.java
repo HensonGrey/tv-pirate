@@ -5,7 +5,8 @@ import java.util.Map;
 
 /**
  * Uniform contract every source provider implements. Adding a provider is one
- * class registered in StreamService; a burned one is deleted just as easily.
+ * class registered in StreamService; a burned one is switched off with its
+ * PROVIDER_*_ENABLED flag without touching the class.
  * vault:streaming-providers-deep-dive#architecture
  */
 public interface StreamProvider {

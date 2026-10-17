@@ -13,10 +13,10 @@ import com.tvpirate.backend.stream.StreamProvider.ResolveRequest;
 import com.tvpirate.backend.stream.StreamProvider.StreamSource;
 
 /**
- * Registry over the StreamProviders plus the resolve cache. One provider
- * resolves per key, fast-fail, no fallback chains — and Caffeine's atomic
- * get() gives single-flight for free, so a prefetch racing a play costs one
- * upstream call, not two. vault:streaming-providers-deep-dive#architecture
+ * Registry over the enabled StreamProviders plus the resolve cache. One
+ * provider resolves per key, fast-fail, no fallback chains — and Caffeine's
+ * atomic get() gives single-flight for free, so a prefetch racing a play costs
+ * one upstream call, not two. vault:streaming-providers-deep-dive#architecture
  */
 @Service
 public class StreamService {
@@ -43,6 +43,11 @@ public class StreamService {
     /** Picker list, sorted — so the UI shows a stable order between visits. */
     public List<String> providerNames() {
         return providers.keySet().stream().sorted().toList();
+    }
+
+    /** Whether the provider is registered; a disabled bean never reaches the map. */
+    public boolean isAvailable(String provider) {
+        return providers.containsKey(provider);
     }
 
     /**

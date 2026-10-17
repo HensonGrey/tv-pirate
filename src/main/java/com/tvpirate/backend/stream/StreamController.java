@@ -40,7 +40,7 @@ public class StreamController {
         this.proxyService = proxyService;
     }
 
-    /** The picker list, sorted by the service. */
+    /** The picker list: enabled providers only, sorted by the service. */
     @GetMapping("/providers")
     public List<String> providers() {
         return streamService.providerNames();
@@ -62,6 +62,9 @@ public class StreamController {
         }
         if (type.equals("tv") && (season == null || episode == null)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "season and episode are required for tv");
+        }
+        if (!streamService.isAvailable(provider)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "provider is not available");
         }
         List<StreamSource> resolved;
         try {
