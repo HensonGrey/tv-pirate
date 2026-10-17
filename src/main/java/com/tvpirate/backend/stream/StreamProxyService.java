@@ -151,7 +151,7 @@ public class StreamProxyService {
                         continue;
                     }
                     if (upstream.getStatusCode().value() == HttpStatus.TOO_MANY_REQUESTS.value()) {
-                        // Worded like the TMDB and OpenSubtitles lines, so one New Relic alert catches every throttled upstream.
+                        // Worded like the TMDB and SubDL lines, so one New Relic alert catches every throttled upstream.
                         log.warn("video server {} answered with status 429", URI.create(target.url()).getHost());
                     }
                     return ResponseEntity.status(upstream.getStatusCode()).build();

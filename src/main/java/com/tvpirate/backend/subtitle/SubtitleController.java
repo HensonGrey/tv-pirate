@@ -21,9 +21,9 @@ import com.tvpirate.backend.ratelimit.RateLimited;
 import jakarta.servlet.http.HttpServletRequest;
 
 /** The subtitle endpoint: one VTT track per title/episode, resolved and
- * cached server-side so the OpenSubtitles key never reaches the browser.
- * The player lazy-loads it as a <track> element; a miss just means the
- * player runs without captions. vault:streaming-providers-deep-dive#subtitles */
+ * cached server-side so the SubDL key never reaches the browser.
+ * The player fetches it only when captions are toggled; a miss just means
+ * the player runs without captions. vault:subtitles-deep-dive#provider */
 @RestController
 @RequestMapping("/api/subtitles")
 @RateLimited(RateLimitPolicy.SUBTITLES)

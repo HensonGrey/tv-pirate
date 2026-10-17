@@ -45,7 +45,7 @@ class GlobalExceptionHandlerTest {
      *  blocked host, and the subtitle service's .env hint. */
     private static final String DB_SECRET = "jdbc:postgresql://localhost:5432/tv-pirate?password=hunter2";
     private static final String BLOCKED_HOST = "169.254.169.254";
-    private static final String ENV_HINT = "add OPENSUBTITLES_API_KEY to backend/.env";
+    private static final String ENV_HINT = "add SUBDL_API_KEY to backend/.env";
 
     private MockMvc mockMvc;
     private ListAppender<ILoggingEvent> logs;
@@ -122,7 +122,7 @@ class GlobalExceptionHandlerTest {
         assertThat(result.getResponse().getStatus()).isEqualTo(503);
         assertThat(result.getResponse().getContentAsString())
                 .doesNotContain(ENV_HINT)
-                .doesNotContain("OPENSUBTITLES_API_KEY")
+                .doesNotContain("SUBDL_API_KEY")
                 .doesNotContain(".env");
     }
 
@@ -248,7 +248,7 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/test/no-api-key")
         String noApiKey() {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                    "OpenSubtitles API key not configured — " + ENV_HINT);
+                    "SubDL API key not configured — " + ENV_HINT);
         }
 
         @GetMapping("/test/bad-request")
